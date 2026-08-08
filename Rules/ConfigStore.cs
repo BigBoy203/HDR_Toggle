@@ -1,0 +1,69 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
+namespace HdrToggle.Rules;
+
+public static class ConfigStore
+{
+    public static readonly string ConfigDir =
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "HdrToggle");
+
+    public static readonly string ConfigPath = Path.Combine(ConfigDir, "config.json");
+
+    private static readonly JsonSerializerOptions Options = new()
+    {
+        WriteIndented = true,
+        Converters = { new JsonStringEnumConverter() },
+    };
+
+    public static AppConfig Load()
+    {
+        try
+        {
+            if (File.Exists(ConfigPath))
+                return JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(ConfigPath), Options) ?? new AppConfig();
+        }
+        catch (Exception ex)
+        {
+            Logger.Log($"Failed to load config, starting fresh: {ex.Message}");
+        }
+        return new AppConfig();
+    }
+
+    public static void Save(AppConfig config)
+    {
+        try
+        {
+            Directory.CreateDirectory(ConfigDir);
+            File.WriteAllText(ConfigPath, JsonSerializer.Serialize(config, Options));
+        }
+        catch (Exception ex)
+        {
+            Logger.Log($"Failed to save config: {ex.Message}");
+        }
+    }
+}
+
+public static class Logger
+{
+    private static readonly string LogPath = Path.Combine(ConfigStore.ConfigDir, "log.txt");
+    private static readonly object Lock = new();
+
+    public static void Log(string message)
+    {
+        try
+        {
+            lock (Lock)
+            {
+                Directory.CreateDirectory(ConfigStore.ConfigDir);
+                if (File.Exists(LogPath) && new FileInfo(LogPath).Length > 512 * 1024)
+                    File.Delete(LogPath);
+                File.AppendAllText(LogPath, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} {message}{Environment.NewLine}");
+            }
+        }
+        catch
+        {
+            // Logging must never take the app down.
+        }
+    }
+}

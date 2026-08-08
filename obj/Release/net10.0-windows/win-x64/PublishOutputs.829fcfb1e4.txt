@@ -1,0 +1,2 @@
+D:\Vibe Code Projects\!Projects\HDR_toggle\bin\Release\net10.0-windows\win-x64\publish\HdrToggle.pdb
+D:\Vibe Code Projects\!Projects\HDR_toggle\bin\Release\net10.0-windows\win-x64\publish\HdrToggle.exe

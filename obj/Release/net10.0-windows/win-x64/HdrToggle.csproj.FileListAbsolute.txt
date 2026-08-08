@@ -1,0 +1,14 @@
+D:\Vibe Code Projects\!Projects\HDR_toggle\bin\Release\net10.0-windows\win-x64\HdrToggle.exe
+D:\Vibe Code Projects\!Projects\HDR_toggle\bin\Release\net10.0-windows\win-x64\HdrToggle.deps.json
+D:\Vibe Code Projects\!Projects\HDR_toggle\bin\Release\net10.0-windows\win-x64\HdrToggle.runtimeconfig.json
+D:\Vibe Code Projects\!Projects\HDR_toggle\bin\Release\net10.0-windows\win-x64\HdrToggle.dll
+D:\Vibe Code Projects\!Projects\HDR_toggle\bin\Release\net10.0-windows\win-x64\HdrToggle.pdb
+D:\Vibe Code Projects\!Projects\HDR_toggle\obj\Release\net10.0-windows\win-x64\HdrToggle.GeneratedMSBuildEditorConfig.editorconfig
+D:\Vibe Code Projects\!Projects\HDR_toggle\obj\Release\net10.0-windows\win-x64\HdrToggle.AssemblyInfoInputs.cache
+D:\Vibe Code Projects\!Projects\HDR_toggle\obj\Release\net10.0-windows\win-x64\HdrToggle.AssemblyInfo.cs
+D:\Vibe Code Projects\!Projects\HDR_toggle\obj\Release\net10.0-windows\win-x64\HdrToggle.csproj.CoreCompileInputs.cache
+D:\Vibe Code Projects\!Projects\HDR_toggle\obj\Release\net10.0-windows\win-x64\HdrToggle.dll
+D:\Vibe Code Projects\!Projects\HDR_toggle\obj\Release\net10.0-windows\win-x64\refint\HdrToggle.dll
+D:\Vibe Code Projects\!Projects\HDR_toggle\obj\Release\net10.0-windows\win-x64\HdrToggle.pdb
+D:\Vibe Code Projects\!Projects\HDR_toggle\obj\Release\net10.0-windows\win-x64\HdrToggle.genruntimeconfig.cache
+D:\Vibe Code Projects\!Projects\HDR_toggle\obj\Release\net10.0-windows\win-x64\ref\HdrToggle.dll
