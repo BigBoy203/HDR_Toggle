@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Drawing.Drawing2D;
 using System.Drawing.Text;
+using HdrToggle.Monitoring;
 using HdrToggle.Rules;
 
 namespace HdrToggle.UI;
@@ -253,6 +254,126 @@ internal class OptionPicker : Button
         menu.MinimumSize = new Size(Width, 0);
         menu.Show(this, new Point(0, Height));
         base.OnClick(e);
+    }
+}
+
+/// <summary>
+/// Click-to-capture field for a system-wide hotkey. Esc cancels, Backspace clears.
+/// A modifier is required: registering a bare key globally would swallow it in every
+/// other app on the machine.
+/// </summary>
+internal class HotkeyBox : Button
+{
+    private Keys _value = Keys.None;
+    private bool _capturing;
+
+    [Browsable(false), DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public Keys Value
+    {
+        get => _value;
+        set
+        {
+            if (_value == value) return;
+            _value = value;
+            Invalidate();
+            ValueChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    public event EventHandler? ValueChanged;
+
+    /// <summary>The owner must release the live hotkey while this is open, or it eats its own replacement.</summary>
+    public event EventHandler? CaptureStarted;
+
+    public event EventHandler? CaptureEnded;
+
+    public HotkeyBox()
+    {
+        FlatStyle = FlatStyle.Flat;
+        FlatAppearance.BorderSize = 1;
+        FlatAppearance.BorderColor = Theme.Border;
+        FlatAppearance.MouseOverBackColor = Theme.CardHover;
+        BackColor = Theme.Field;
+        ForeColor = Theme.Text;
+        Font = Theme.Small;
+        Cursor = Cursors.Hand;
+        Text = "";
+        TextAlign = ContentAlignment.MiddleCenter;
+    }
+
+    protected override void OnClick(EventArgs e)
+    {
+        if (!_capturing)
+        {
+            _capturing = true;
+            FlatAppearance.BorderColor = Theme.Accent;
+            Invalidate();
+            CaptureStarted?.Invoke(this, EventArgs.Empty);
+        }
+        base.OnClick(e);
+    }
+
+    protected override void OnLostFocus(EventArgs e)
+    {
+        StopCapture();
+        base.OnLostFocus(e);
+    }
+
+    /// <summary>Ends capture from outside, e.g. when the window is hidden to the tray. No-op when idle.</summary>
+    public void CancelCapture() => StopCapture();
+
+    private void StopCapture()
+    {
+        if (!_capturing) return;
+        _capturing = false;
+        FlatAppearance.BorderColor = Theme.Border;
+        Invalidate();
+        CaptureEnded?.Invoke(this, EventArgs.Empty);
+    }
+
+    // Key handling goes through ProcessCmdKey so Tab, Enter, Alt and the arrows are
+    // captured as part of a combo instead of being consumed by form navigation.
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    {
+        if (!_capturing)
+            return base.ProcessCmdKey(ref msg, keyData);
+
+        var key = keyData & Keys.KeyCode;
+        switch (key)
+        {
+            case Keys.Escape:
+                StopCapture();
+                return true;
+            case Keys.Back:
+            case Keys.Delete:
+                Value = Keys.None;
+                StopCapture();
+                return true;
+            case Keys.None:
+            case Keys.ControlKey:
+            case Keys.ShiftKey:
+            case Keys.Menu:
+            case Keys.LWin:
+            case Keys.RWin:
+                return true; // modifier held; still waiting for the real key
+        }
+
+        var modifiers = keyData & (Keys.Control | Keys.Alt | Keys.Shift);
+        if (modifiers == Keys.None)
+            return true;
+
+        Value = modifiers | key;
+        StopCapture();
+        return true;
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e);
+        string text = _capturing ? "Press keys\u2026" : HotkeyManager.Describe(_value);
+        var color = _capturing ? Theme.Accent : _value == Keys.None ? Theme.TextDim : Theme.Text;
+        TextRenderer.DrawText(e.Graphics, text, Font, ClientRectangle, color,
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
     }
 }
 

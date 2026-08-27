@@ -2,6 +2,22 @@ using HdrToggle.Display;
 
 namespace HdrToggle.Rules;
 
+/// <summary>What the app is doing right now, in the order the tray icon prioritises it.</summary>
+public enum AppState
+{
+    /// <summary>Automation is switched off entirely.</summary>
+    Paused,
+
+    /// <summary>Idle, polling for a profiled game to appear.</summary>
+    Watching,
+
+    /// <summary>A profiled game is running and its rules are applied.</summary>
+    Active,
+
+    /// <summary>Overlays are lifted so the other monitors can be glanced at.</summary>
+    Peeking,
+}
+
 /// <summary>
 /// Applies launch rules when a profiled game starts and exit rules (default:
 /// restore the pre-launch HDR state) when the last profiled game stops.
@@ -13,7 +29,11 @@ public sealed class RuleEngine
     private readonly HashSet<string> _active = new(StringComparer.OrdinalIgnoreCase);
     private readonly OverlayManager _overlays = new();
 
+    /// <summary>Transient one-off message for the status bar.</summary>
     public event Action<string>? StatusChanged;
+
+    /// <summary>Raised whenever <see cref="State"/> may have changed, for the tray icon and UI.</summary>
+    public event Action? StateChanged;
 
     public RuleEngine(AppConfig config, Action save)
     {
@@ -22,6 +42,76 @@ public sealed class RuleEngine
     }
 
     public bool GameActive => _active.Count > 0;
+
+    /// <summary>Stops the watcher from acting on anything until switched back on.</summary>
+    public bool Paused
+    {
+        get => _config.Paused;
+        set
+        {
+            if (_config.Paused == value)
+                return;
+            _config.Paused = value;
+            _save();
+            Logger.Log(value ? "Automation paused." : "Automation resumed.");
+            StateChanged?.Invoke();
+        }
+    }
+
+    /// <summary>
+    /// Master switch for the "while playing" overlays. Turning it off drops them
+    /// instantly for a quick look at the other monitors; turning it back on restores
+    /// them. Deliberately not persisted — a peek is a moment, not a setting — and it
+    /// re-arms itself when the last profiled game exits.
+    /// </summary>
+    public bool OverlaysEnabled
+    {
+        get => _overlays.Enabled;
+        set
+        {
+            if (_overlays.Enabled == value)
+                return;
+            _overlays.Enabled = value;
+            StateChanged?.Invoke();
+            StatusChanged?.Invoke(value ? "Overlays restored" : "Overlays lifted — press again to restore");
+        }
+    }
+
+    /// <summary>Flips the overlay master switch; wired to the tray menu and the peek hotkey.</summary>
+    public void ToggleOverlays() => OverlaysEnabled = !OverlaysEnabled;
+
+    public AppState State =>
+        _config.Paused ? AppState.Paused :
+        !OverlaysEnabled ? AppState.Peeking :
+        GameActive ? AppState.Active :
+        AppState.Watching;
+
+    /// <summary>One-line description of <see cref="State"/> for the status bar, tray tip and menu.</summary>
+    public string StatusText
+    {
+        get
+        {
+            if (_config.Paused)
+                return "Automation paused";
+
+            string running = string.Join(", ", ActiveProfileNames());
+            if (!OverlaysEnabled)
+                return running.Length > 0 ? $"Overlays lifted — {running} running" : "Overlays lifted";
+            if (running.Length > 0)
+                return $"Running: {running}";
+
+            int enabled = _config.Profiles.Count(p => p.Enabled);
+            return $"Watching {enabled} game{(enabled == 1 ? "" : "s")}";
+        }
+    }
+
+    /// <summary>Display names of the running profiles, falling back to the process name.</summary>
+    private IEnumerable<string> ActiveProfileNames() =>
+        _active.Select(name => _config.Profiles
+            .FirstOrDefault(p => string.Equals(p.ProcessName, name, StringComparison.OrdinalIgnoreCase))?.Name ?? name);
+
+    /// <summary>Re-raises <see cref="StateChanged"/> after the profile list is edited.</summary>
+    public void NotifyProfilesChanged() => StateChanged?.Invoke();
 
     /// <summary>
     /// If the app previously crashed/exited while a game was active, and that game
@@ -85,6 +175,7 @@ public sealed class RuleEngine
         foreach (var (path, action) in profile.OverlayRules)
             _overlays.Apply(path, action);
 
+        StateChanged?.Invoke();
         StatusChanged?.Invoke($"Applied launch rules for {profile.Name}");
     }
 
@@ -99,6 +190,7 @@ public sealed class RuleEngine
         {
             // Another profiled game is still running; defer restore until it exits.
             _save();
+            StateChanged?.Invoke();
             return;
         }
 
@@ -138,8 +230,18 @@ public sealed class RuleEngine
 
         _overlays.CloseAll();
 
+        // A peek is meant to last a moment. Re-arm the overlays now that nothing is
+        // running, so a hotkey press that was never undone can't silently disable the
+        // blackout for the next movie.
+        if (!_overlays.Enabled)
+        {
+            _overlays.Enabled = true;
+            Logger.Log("Overlays re-armed after the last game exited.");
+        }
+
         _config.HdrSnapshot = null;
         _save();
+        StateChanged?.Invoke();
         StatusChanged?.Invoke($"Applied exit rules for {profile.Name}");
     }
 

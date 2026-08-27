@@ -20,6 +20,7 @@ internal static class Theme
     public static readonly Color Danger = ColorTranslator.FromHtml("#E5484D");
     public static readonly Color Good = ColorTranslator.FromHtml("#46C878");
     public static readonly Color TrackOff = ColorTranslator.FromHtml("#3A4152");
+    public static readonly Color Idle = ColorTranslator.FromHtml("#5A8DEE");
 
     public static readonly Font Base = new("Segoe UI", 9.75f);
     public static readonly Font Small = new("Segoe UI", 8.75f);

@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using HdrToggle.Display;
+using HdrToggle.Monitoring;
 using HdrToggle.Rules;
 
 namespace HdrToggle.UI;
@@ -24,6 +25,8 @@ public sealed class MainForm : Form
 
     private readonly AppConfig _config;
     private readonly Action _save;
+    private readonly RuleEngine _engine;
+    private readonly HotkeyManager _hotkeys;
 
     private readonly FlowLayoutPanel _gameList;
     private readonly Panel _content;
@@ -35,11 +38,17 @@ public sealed class MainForm : Form
     private readonly FlowLayoutPanel _displayList;
     private readonly Label _statusLabel;
     private readonly ToggleSwitch _autostartToggle;
+    private readonly ToggleSwitch _overlayToggle;
+    private readonly Label _overlayLabel;
+    private readonly HotkeyBox _hotkeyBox;
     private readonly ToolTip _tips = new();
     private readonly Dictionary<string, Image> _iconCache = new(StringComparer.OrdinalIgnoreCase);
 
     private GameProfile? _selected;
     private bool _loading;
+
+    /// <summary>Set while pushing engine state into the controls, so echoes don't loop back.</summary>
+    private bool _syncing;
 
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
@@ -48,10 +57,12 @@ public sealed class MainForm : Form
     /// <summary>Scales a 96-dpi design value to the window's DPI.</summary>
     private int S(int v) => (int)Math.Round(v * DeviceDpi / 96.0);
 
-    public MainForm(AppConfig config, Action save, RuleEngine engine)
+    public MainForm(AppConfig config, Action save, RuleEngine engine, HotkeyManager hotkeys)
     {
         _config = config;
         _save = save;
+        _engine = engine;
+        _hotkeys = hotkeys;
 
         Text = "HDR Toggle";
         StartPosition = FormStartPosition.CenterScreen;
@@ -124,7 +135,35 @@ public sealed class MainForm : Form
             }
             _save();
         };
+        var hotkeyLabel = new Label
+        {
+            Text = "Peek hotkey",
+            AutoSize = true,
+            ForeColor = Theme.TextDim,
+            BackColor = Theme.Sidebar,
+            Margin = new Padding(S(14), S(19), S(8), 0),
+        };
+        _hotkeyBox = new HotkeyBox
+        {
+            Value = _config.PeekHotkey,
+            Size = new Size(S(112), S(26)),
+            Margin = new Padding(0, S(15), S(6), 0),
+        };
+        _tips.SetToolTip(_hotkeyBox, "Click, then press the combo that lifts and restores the overlays.\n"
+            + "Esc cancels, Backspace clears. A modifier (Ctrl/Alt/Shift) is required.");
+        // The live hotkey has to stand down while the field is capturing, or it
+        // intercepts the very keys the user is trying to assign.
+        _hotkeyBox.CaptureStarted += (_, _) => _hotkeys.Suspend();
+        _hotkeyBox.ValueChanged += (_, _) =>
+        {
+            _config.PeekHotkey = _hotkeyBox.Value;
+            _save();
+        };
+        _hotkeyBox.CaptureEnded += (_, _) => ApplyHotkey();
+
         bottomRight.Controls.Add(refreshBtn);
+        bottomRight.Controls.Add(hotkeyLabel);
+        bottomRight.Controls.Add(_hotkeyBox);
         bottomRight.Controls.Add(autoLabel);
         bottomRight.Controls.Add(_autostartToggle);
         bottomBar.Controls.Add(bottomRight);
@@ -206,9 +245,20 @@ public sealed class MainForm : Form
             _save();
             foreach (var card in _gameList.Controls.OfType<GameCard>())
                 if (card.Profile == p) card.Invalidate();
-            UpdateStatus();
+            _engine.NotifyProfilesChanged();
         };
         var enabledLabel = new Label { Text = "Profile enabled", AutoSize = true, ForeColor = Theme.TextDim, BackColor = Theme.Bg };
+
+        // Overlay master switch. App-wide rather than per-profile, so it sits under its
+        // own separator and turns amber when lifted to flag the non-default state.
+        var overlaySeparator = new Panel { Size = new Size(1, S(22)), BackColor = Theme.Border };
+        _overlayToggle = new ToggleSwitch { Checked = engine.OverlaysEnabled, Size = new Size(S(44), S(22)) };
+        _overlayLabel = new Label { Text = "Overlays", AutoSize = true, ForeColor = Theme.TextDim, BackColor = Theme.Bg };
+        _overlayToggle.CheckedChanged += (_, _) =>
+        {
+            if (_syncing) return;
+            _engine.OverlaysEnabled = _overlayToggle.Checked;
+        };
 
         var removeBtn = new Button
         {
@@ -226,6 +276,9 @@ public sealed class MainForm : Form
         header.Controls.Add(_pathLabel);
         header.Controls.Add(_enabledToggle);
         header.Controls.Add(enabledLabel);
+        header.Controls.Add(overlaySeparator);
+        header.Controls.Add(_overlayToggle);
+        header.Controls.Add(_overlayLabel);
         header.Controls.Add(removeBtn);
         header.Resize += (_, _) =>
         {
@@ -235,6 +288,9 @@ public sealed class MainForm : Form
             _pathLabel.Size = new Size(rightEdge - S(76), _pathLabel.Font.Height + S(4));
             _enabledToggle.Location = new Point(S(76), _pathLabel.Bottom + S(10));
             enabledLabel.Location = new Point(_enabledToggle.Right + S(8), _enabledToggle.Top + S(1));
+            overlaySeparator.Location = new Point(enabledLabel.Right + S(18), _enabledToggle.Top);
+            _overlayToggle.Location = new Point(overlaySeparator.Right + S(18), _enabledToggle.Top);
+            _overlayLabel.Location = new Point(_overlayToggle.Right + S(8), _enabledToggle.Top + S(1));
             removeBtn.Location = new Point(rightEdge - removeBtn.Width, S(6));
             header.Height = _enabledToggle.Bottom + S(16);
         };
@@ -271,9 +327,44 @@ public sealed class MainForm : Form
         Controls.Add(bottomBar);
 
         engine.StatusChanged += msg => _statusLabel.Text = msg;
+        engine.StateChanged += SyncEngineState;
 
         RefreshProfileList();
+        SyncEngineState();
+        ApplyHotkeyTooltip();
+
+        // The hotkey is registered before this window exists, so report a clash here.
+        if (_config.PeekHotkey != Keys.None && !_hotkeys.IsRegistered)
+            _statusLabel.Text = $"Peek hotkey {HotkeyManager.Describe(_config.PeekHotkey)} is already taken by another app";
+    }
+
+    /// <summary>Mirrors engine state into the controls; the engine is the source of truth.</summary>
+    private void SyncEngineState()
+    {
+        _syncing = true;
+        _overlayToggle.Checked = _engine.OverlaysEnabled;
+        _overlayLabel.ForeColor = _engine.OverlaysEnabled ? Theme.TextDim : Theme.Accent;
+        _syncing = false;
         UpdateStatus();
+    }
+
+    /// <summary>(Re-)registers the configured peek hotkey and reports a clash in the status bar.</summary>
+    private void ApplyHotkey()
+    {
+        bool ok = _hotkeys.Register(_config.PeekHotkey);
+        ApplyHotkeyTooltip();
+        if (!ok)
+            _statusLabel.Text = $"{HotkeyManager.Describe(_config.PeekHotkey)} is already taken by another app — pick another";
+        else
+            UpdateStatus();
+    }
+
+    private void ApplyHotkeyTooltip()
+    {
+        string combo = HotkeyManager.Describe(_config.PeekHotkey);
+        _tips.SetToolTip(_overlayToggle, _config.PeekHotkey == Keys.None
+            ? "Lifts the \"while playing\" overlays on every display so you can glance at your other monitors. Applies to the whole app, not just this profile."
+            : $"Lifts the \"while playing\" overlays on every display so you can glance at your other monitors ({combo}). Applies to the whole app, not just this profile.");
     }
 
     protected override void OnHandleCreated(EventArgs e)
@@ -393,7 +484,7 @@ public sealed class MainForm : Form
         _config.Profiles.Add(profile);
         _save();
         RefreshProfileList(profile);
-        UpdateStatus();
+        _engine.NotifyProfilesChanged();
     }
 
     private void RemoveProfile()
@@ -407,7 +498,7 @@ public sealed class MainForm : Form
         _selected = null;
         _save();
         RefreshProfileList();
-        UpdateStatus();
+        _engine.NotifyProfilesChanged();
     }
 
     // ===== rule editor =====
@@ -437,6 +528,7 @@ public sealed class MainForm : Form
         _displayList.Controls.Clear();
 
         List<DisplayInfo> displays;
+        string? error = null;
         try
         {
             displays = HdrController.GetDisplays();
@@ -444,7 +536,7 @@ public sealed class MainForm : Form
         catch (Exception ex)
         {
             displays = new();
-            _statusLabel.Text = $"Could not enumerate displays: {ex.Message}";
+            error = $"Could not enumerate displays: {ex.Message}";
         }
 
         foreach (var d in displays)
@@ -458,7 +550,11 @@ public sealed class MainForm : Form
 
         ResizeCards(_displayList);
         _displayList.ResumeLayout();
-        UpdateStatus();
+
+        if (error is null)
+            UpdateStatus();
+        else
+            _statusLabel.Text = error;
     }
 
     private CardPanel BuildDisplayCard(GameProfile profile, string path, string name, bool supportsHdr, bool connected)
@@ -607,12 +703,15 @@ public sealed class MainForm : Form
         _ => ExitAction.RestorePrevious,
     };
 
-    private void UpdateStatus()
+    private void UpdateStatus() => _statusLabel.Text = _engine.StatusText;
+
+    protected override void OnDeactivate(EventArgs e)
     {
-        int enabled = _config.Profiles.Count(p => p.Enabled);
-        _statusLabel.Text = _config.Paused
-            ? "Automation paused"
-            : $"Watching {enabled} game{(enabled == 1 ? "" : "s")}";
+        base.OnDeactivate(e);
+        // If the window is hidden or backgrounded mid-capture the field may never see
+        // LostFocus, which would leave the suspended hotkey dead. Ending the capture
+        // here re-registers it through CaptureEnded; it's a no-op when not capturing.
+        _hotkeyBox.CancelCapture();
     }
 
     protected override void OnFormClosing(FormClosingEventArgs e)

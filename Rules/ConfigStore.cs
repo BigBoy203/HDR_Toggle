@@ -25,9 +25,26 @@ public static class ConfigStore
         }
         catch (Exception ex)
         {
+            // Starting fresh means losing every profile, so keep the unreadable file
+            // around instead of overwriting it on the next save.
             Logger.Log($"Failed to load config, starting fresh: {ex.Message}");
+            TryBackupBadConfig();
         }
         return new AppConfig();
+    }
+
+    private static void TryBackupBadConfig()
+    {
+        try
+        {
+            string backup = Path.Combine(ConfigDir, "config.bad.json");
+            File.Copy(ConfigPath, backup, overwrite: true);
+            Logger.Log($"Unreadable config copied to {backup}");
+        }
+        catch (Exception ex)
+        {
+            Logger.Log($"Could not back up the unreadable config: {ex.Message}");
+        }
     }
 
     public static void Save(AppConfig config)

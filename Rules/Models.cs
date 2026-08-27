@@ -48,6 +48,25 @@ public class AppConfig
     public bool StartWithWindows { get; set; }
     public bool Paused { get; set; }
 
+    /// <summary>
+    /// System-wide combo that lifts/restores the "while playing" overlays for a quick
+    /// look at the other monitors. <see cref="Keys.None"/> disables the hotkey.
+    /// </summary>
+    [JsonIgnore]
+    public Keys PeekHotkey { get; set; } = Keys.Control | Keys.Alt | Keys.B;
+
+    /// <summary>
+    /// Serialized form of <see cref="PeekHotkey"/>. Stored as a raw int rather than
+    /// enum names: Keys is a flags enum with several aliased members, and an unreadable
+    /// config costs the user every profile in it.
+    /// </summary>
+    [JsonPropertyName("PeekHotkey")]
+    public int PeekHotkeyValue
+    {
+        get => (int)PeekHotkey;
+        set => PeekHotkey = (Keys)value;
+    }
+
     /// <summary>HDR state per display path captured before the first game launched; null when no game is active.</summary>
     public Dictionary<string, bool>? HdrSnapshot { get; set; }
 
