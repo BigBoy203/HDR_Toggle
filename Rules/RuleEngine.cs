@@ -136,6 +136,10 @@ public sealed class RuleEngine
         _active.Select(name => _config.Profiles
             .FirstOrDefault(p => string.Equals(p.ProcessName, name, StringComparison.OrdinalIgnoreCase))?.Name ?? name);
 
+    /// <summary>Whether this profile's game is one of the ones currently running.</summary>
+    public bool IsRunning(GameProfile profile) =>
+        profile.ProcessName.Length > 0 && _active.Contains(profile.ProcessName);
+
     /// <summary>Re-raises <see cref="StateChanged"/> after the profile list is edited.</summary>
     public void NotifyProfilesChanged() => StateChanged?.Invoke();
 

@@ -89,8 +89,12 @@ internal class ToggleSwitch : Control
     }
 }
 
-/// <summary>Clickable tile for a game profile: exe icon, name, process, state.</summary>
-internal class GameCard : Control
+/// <summary>
+/// One row of the game library: exe icon, name, and what it is doing. Deliberately flat
+/// rather than a card — a list of these should read as a library list, with the selected
+/// row marked by an accent bar down its left edge rather than by a box around it.
+/// </summary>
+internal class GameRow : Control
 {
     private bool _hover;
 
@@ -109,12 +113,22 @@ internal class GameCard : Control
         set { _selected = value; Invalidate(); }
     }
 
-    public GameCard()
+    private bool _running;
+
+    /// <summary>Shown in place of the .exe name, the way a library marks what is up.</summary>
+    [Browsable(false), DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool Running
+    {
+        get => _running;
+        set { if (_running == value) return; _running = value; Invalidate(); }
+    }
+
+    public GameRow()
     {
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
         BackColor = Theme.Sidebar;
         Cursor = Cursors.Hand;
-        Height = 64;
+        Height = 52;
     }
 
     private int S(int v) => (int)Math.Round(v * DeviceDpi / 96.0);
@@ -128,24 +142,25 @@ internal class GameCard : Control
         g.SmoothingMode = SmoothingMode.AntiAlias;
         g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
 
-        var rect = new RectangleF(0.5f, 0.5f, Width - 1, Height - 1);
-        using (var path = Theme.RoundedRect(rect, S(10)))
+        var fill = _selected ? Theme.CardSelected : _hover ? Theme.CardHover : Theme.Sidebar;
+        using (var brush = new SolidBrush(fill))
+            g.FillRectangle(brush, ClientRectangle);
+
+        if (_selected)
         {
-            using var fill = new SolidBrush(_selected ? Theme.CardSelected : _hover ? Theme.CardHover : Theme.Card);
-            g.FillPath(fill, path);
-            using var pen = new Pen(_selected ? Theme.Accent : Theme.Border, _selected ? 1.6f : 1f);
-            g.DrawPath(pen, path);
+            using var marker = new SolidBrush(Theme.Accent);
+            g.FillRectangle(marker, 0, 0, S(3), Height);
         }
 
-        int pad = S(14);
-        int iconSize = S(38);
+        int pad = S(12);
+        int iconSize = S(28);
         int iconY = (Height - iconSize) / 2;
         if (GameIcon is not null)
-            g.DrawImage(GameIcon, new Rectangle(pad, iconY, iconSize, iconSize));
+            g.DrawImage(GameIcon, new Rectangle(pad + S(4), iconY, iconSize, iconSize));
 
         var nameColor = Profile.Enabled ? Theme.Text : Theme.TextDim;
-        int textX = pad + iconSize + S(14);
-        int textW = Width - textX - S(14);
+        int textX = pad + S(4) + iconSize + S(12);
+        int textW = Width - textX - S(12);
 
         // Reserve room for the "Off" pill when disabled
         if (!Profile.Enabled)
@@ -165,19 +180,37 @@ internal class GameCard : Control
             textW -= pillW + S(10);
         }
 
-        // Both lines as one block, centred against the icon, so the tile's height is free
-        // to change without the text drifting away from the middle of it.
         int nameH = TextRenderer.MeasureText("X", Theme.Header).Height;
         int subH = TextRenderer.MeasureText("X", Theme.Small).Height;
-        int textY = (Height - (nameH + S(3) + subH)) / 2;
+        int textY = (Height - (nameH + S(2) + subH)) / 2;
 
         var nameRect = new Rectangle(textX, textY, textW, nameH);
         TextRenderer.DrawText(g, Profile.Name, Theme.Header, nameRect, nameColor,
             TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
 
-        var subRect = new Rectangle(textX, nameRect.Bottom + S(3), textW, subH);
-        TextRenderer.DrawText(g, Profile.ProcessName + ".exe", Theme.Small, subRect, Theme.TextDim,
+        var subRect = new Rectangle(textX, nameRect.Bottom + S(2), textW, subH);
+        TextRenderer.DrawText(g, _running ? "Running" : Profile.ProcessName + ".exe", Theme.Small, subRect,
+            _running ? Theme.Good : Theme.TextDim,
             TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+    }
+}
+
+/// <summary>Panel washed with a vertical gradient — the header behind a game's name.</summary>
+internal class GradientPanel : Panel
+{
+    public Color TopColor { get; set; } = Theme.HeroTop;
+    public Color BottomColor { get; set; } = Theme.Bg;
+
+    public GradientPanel()
+    {
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        using (var wash = Theme.VerticalWash(ClientRectangle, TopColor, BottomColor))
+            e.Graphics.FillRectangle(wash, ClientRectangle);
+        base.OnPaint(e);
     }
 }
 

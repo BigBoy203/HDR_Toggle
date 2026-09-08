@@ -9,13 +9,16 @@ internal static class Theme
     // Black and orange, taken from app.ico: its body is #181A26 and its mark runs
     // #FFA028 → #FFBE47. The greys are kept off the blue side of neutral so the orange
     // stays the only colour with any temperature to it.
-    public static readonly Color Bg = ColorTranslator.FromHtml("#0E1015");
-    public static readonly Color Sidebar = ColorTranslator.FromHtml("#131620");
-    public static readonly Color Card = ColorTranslator.FromHtml("#181A26");
-    public static readonly Color CardHover = ColorTranslator.FromHtml("#212431");
-    public static readonly Color CardSelected = ColorTranslator.FromHtml("#2B2418"); // warm, under the accent border
-    public static readonly Color Field = ColorTranslator.FromHtml("#1D202B");
-    public static readonly Color Border = ColorTranslator.FromHtml("#2A2D39");
+    public static readonly Color Bg = ColorTranslator.FromHtml("#0A0B0F");
+    public static readonly Color Sidebar = ColorTranslator.FromHtml("#07080B");
+    public static readonly Color Card = ColorTranslator.FromHtml("#111319");
+    public static readonly Color CardHover = ColorTranslator.FromHtml("#191C24");
+    public static readonly Color CardSelected = ColorTranslator.FromHtml("#241D12"); // warm, under the accent marker
+    public static readonly Color Field = ColorTranslator.FromHtml("#15171F");
+    public static readonly Color Border = ColorTranslator.FromHtml("#22252F");
+
+    /// <summary>Top of the hero panel's wash, fading into <see cref="Bg"/>.</summary>
+    public static readonly Color HeroTop = ColorTranslator.FromHtml("#171922");
     public static readonly Color Accent = ColorTranslator.FromHtml("#FFA028");
     public static readonly Color AccentHover = ColorTranslator.FromHtml("#FFB23E");
     public static readonly Color AccentSoft = ColorTranslator.FromHtml("#4A3517");
@@ -34,6 +37,10 @@ internal static class Theme
     public static readonly Font Header = new("Segoe UI Semibold", 10.5f);
     public static readonly Font Section = new("Segoe UI Semibold", 12f);
     public static readonly Font Title = new("Segoe UI Semibold", 14.25f);
+
+    /// <summary>Vertical two-stop wash, for the hero panel behind a game's name.</summary>
+    public static Brush VerticalWash(Rectangle bounds, Color top, Color bottom) =>
+        new LinearGradientBrush(bounds with { Y = bounds.Y - 1, Height = bounds.Height + 2 }, top, bottom, 90f);
 
     public static GraphicsPath RoundedRect(RectangleF r, float radius)
     {

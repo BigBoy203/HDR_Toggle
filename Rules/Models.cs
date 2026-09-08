@@ -55,6 +55,15 @@ public class GameProfile
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] // so it leaves no dead key behind
     public Dictionary<string, int>? LegacyRefreshRateRules { get; set; }
 
+    /// <summary>
+    /// What the library's Play button starts, when that isn't the profiled .exe itself —
+    /// a launcher, a mod loader, a shortcut. Null means launch <see cref="ExePath"/>. The
+    /// profile still watches <see cref="ProcessName"/>, so the rules fire on the game
+    /// however it was started.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? LaunchPath { get; set; }
+
     [JsonIgnore]
     public string ProcessName => Path.GetFileNameWithoutExtension(ExePath);
 

@@ -4,7 +4,9 @@ A small Windows tray app that automatically switches HDR on or off per display �
 
 ## How it works
 
-1. **Add a game** — point the app at the game's `.exe`. It shows up as a tile with the game's icon.
+1. **Add a game** — point the app at the game's `.exe`. It joins the library on the left, with its icon, and gets a page of its own: a **Play** button, the switches for that profile, and a card per display.
+   - Play starts the game's `.exe`. If that isn't the right thing to start — a launcher, a mod loader, a shortcut — the **▾** beside it sets what Play launches, and can open the game's folder. The profile still *watches* the `.exe`, so the rules fire on the game however it was started.
+   - While the game is up, Play reads **RUNNING** and the library row says so.
 2. **Set rules per display** — each connected monitor gets a card; choose what happens when the game launches (*Turn HDR on / Turn HDR off / No change*) and when it exits (*Restore previous* — the default, *Turn HDR on / off*, or *No change*).
 3. **Cap the frame rate** — one setting per game, in the profile header: on NVIDIA it sets the driver's per-game frame rate limit, and every display is held at that refresh rate for as long as the game runs (see below).
 4. **While playing** (every display, HDR or not) — optionally *Black out screen* or *Dim screen* for the duration of the game. This is a pure overlay window (click-through, never steals focus, hidden from Alt+Tab) — no display settings are touched, and it disappears the moment the game closes.
@@ -76,6 +78,13 @@ display mode change and no black-screen flicker mid-film.
 - A peek is a moment, not a setting: it isn't saved to disk, and it re-arms itself when
   the last profiled game exits, so a press you forgot to undo can't silently disable the
   blackout for the next movie.
+
+## Settings
+
+**⚙ Settings**, at the bottom of the library list, holds the app-wide things: *Start with
+Windows*, the peek hotkey, which build this is, whether hard frame rate limiting is
+available, and a shortcut to the settings folder. Everything that belongs to one game —
+its rules, its FPS cap, what Play launches — stays on that game's own page.
 
 ## The tray icon
 

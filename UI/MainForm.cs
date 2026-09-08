@@ -43,12 +43,11 @@ public sealed class MainForm : Form
     private readonly ToggleSwitch _enabledToggle;
     private readonly FlowLayoutPanel _displayList;
     private readonly Label _statusLabel;
-    private readonly ToggleSwitch _autostartToggle;
     private readonly ToggleSwitch _overlayToggle;
     private readonly Label _overlayLabel;
     private readonly OptionPicker _capPicker;
     private readonly Label _capNote;
-    private readonly HotkeyBox _hotkeyBox;
+    private readonly Button _playButton;
     private readonly ToolTip _tips = new();
     private readonly Dictionary<string, Image> _iconCache = new(StringComparer.OrdinalIgnoreCase);
 
@@ -149,88 +148,6 @@ public sealed class MainForm : Form
         bottomLeft.Controls.Add(_statusLabel);
         bottomBar.Controls.Add(bottomLeft);
 
-        var bottomRight = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Right,
-            FlowDirection = FlowDirection.LeftToRight,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            BackColor = Theme.Sidebar,
-            WrapContents = false,
-            Padding = new Padding(0, 0, S(12), 0),
-        };
-        var refreshBtn = new Button
-        {
-            Text = "Refresh displays",
-            AutoSize = true,
-            Font = Theme.Small,
-            Padding = new Padding(S(8), S(4), S(8), S(4)),
-            Margin = new Padding(S(6), S(14), S(6), S(14)),
-        };
-        ControlStyling.StyleButton(refreshBtn, Theme.Field, Theme.Text);
-        refreshBtn.Click += (_, _) => LoadSelectedProfile();
-        var autoLabel = new Label
-        {
-            Text = "Start with Windows",
-            AutoSize = true,
-            ForeColor = Theme.TextDim,
-            BackColor = Theme.Sidebar,
-            Margin = new Padding(S(10), S(21), S(8), 0),
-        };
-        _autostartToggle = new ToggleSwitch
-        {
-            Checked = _config.StartWithWindows,
-            Size = new Size(S(44), S(22)),
-            Margin = new Padding(0, S(19), S(6), 0),
-        };
-        _autostartToggle.CheckedChanged += (_, _) =>
-        {
-            if (_loading) return;
-            _config.StartWithWindows = _autostartToggle.Checked;
-            try
-            {
-                Autostart.SetEnabled(_autostartToggle.Checked);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(this, $"Could not update startup setting:\n{ex.Message}", "HDR Toggle",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            }
-            _save();
-        };
-        var hotkeyLabel = new Label
-        {
-            Text = "Peek hotkey",
-            AutoSize = true,
-            ForeColor = Theme.TextDim,
-            BackColor = Theme.Sidebar,
-            Margin = new Padding(S(14), S(21), S(8), 0),
-        };
-        _hotkeyBox = new HotkeyBox
-        {
-            Value = _config.PeekHotkey,
-            Size = new Size(S(112), S(26)),
-            Margin = new Padding(0, S(17), S(6), 0),
-        };
-        _tips.SetToolTip(_hotkeyBox, "Click, then press the combo that lifts and restores the overlays.\n"
-            + "Esc cancels, Backspace clears. A modifier (Ctrl/Alt/Shift) is required.");
-        // The live hotkey has to stand down while the field is capturing, or it
-        // intercepts the very keys the user is trying to assign.
-        _hotkeyBox.CaptureStarted += (_, _) => _hotkeys.Suspend();
-        _hotkeyBox.ValueChanged += (_, _) =>
-        {
-            _config.PeekHotkey = _hotkeyBox.Value;
-            _save();
-        };
-        _hotkeyBox.CaptureEnded += (_, _) => ApplyHotkey();
-
-        bottomRight.Controls.Add(refreshBtn);
-        bottomRight.Controls.Add(hotkeyLabel);
-        bottomRight.Controls.Add(_hotkeyBox);
-        bottomRight.Controls.Add(autoLabel);
-        bottomRight.Controls.Add(_autostartToggle);
-        bottomBar.Controls.Add(bottomRight);
-
         // ===== sidebar =====
         var sidebar = new Panel
         {
@@ -254,7 +171,22 @@ public sealed class MainForm : Form
         var addBtnSpacer = new Panel { Dock = DockStyle.Top, Height = S(16), BackColor = Theme.Sidebar };
         var gamesLabel = new Label { Dock = DockStyle.Top, Height = S(38), Text = "Games", Font = Theme.Section, ForeColor = Theme.Text, BackColor = Theme.Sidebar };
 
+        var settingsBtn = new Button
+        {
+            Dock = DockStyle.Bottom,
+            Height = S(36),
+            Text = "⚙   Settings",
+            Font = Theme.Base,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Padding = new Padding(S(12), 0, 0, 0),
+        };
+        ControlStyling.StyleButton(settingsBtn, Theme.Field, Theme.Text);
+        settingsBtn.Click += (_, _) => ShowSettings();
+        var settingsSpacer = new Panel { Dock = DockStyle.Bottom, Height = S(12), BackColor = Theme.Sidebar };
+
         sidebar.Controls.Add(_gameList);
+        sidebar.Controls.Add(settingsSpacer);
+        sidebar.Controls.Add(settingsBtn);
         sidebar.Controls.Add(addBtnSpacer);
         sidebar.Controls.Add(addBtn);
         sidebar.Controls.Add(gamesLabel);
@@ -262,22 +194,22 @@ public sealed class MainForm : Form
         // ===== main content =====
         _content = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Bg, Padding = new Padding(S(28), S(22), S(28), S(16)) };
 
-        var header = new Panel { Dock = DockStyle.Top, Height = S(118), BackColor = Theme.Bg };
+        var header = new GradientPanel { Dock = DockStyle.Top, Height = S(150), BackColor = Theme.Bg };
 
         _iconBox = new PictureBox
         {
             Location = new Point(0, S(6)),
-            Size = new Size(S(56), S(56)),
+            Size = new Size(S(64), S(64)),
             SizeMode = PictureBoxSizeMode.Zoom,
-            BackColor = Theme.Bg,
+            BackColor = Color.Transparent,
         };
 
         _nameBox = new TextBox
         {
-            Location = new Point(S(74), S(6)),
+            Location = new Point(S(82), S(8)),
             Font = Theme.Title,
             BorderStyle = BorderStyle.None,
-            BackColor = Theme.Bg,
+            BackColor = Theme.HeroTop,
             ForeColor = Theme.Text,
             Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
         };
@@ -286,7 +218,7 @@ public sealed class MainForm : Form
             if (_loading || _selected is not { } p) return;
             p.Name = _nameBox.Text;
             _save();
-            foreach (var card in _gameList.Controls.OfType<GameCard>())
+            foreach (var card in _gameList.Controls.OfType<GameRow>())
                 if (card.Profile == p) card.Invalidate();
         };
 
@@ -295,7 +227,7 @@ public sealed class MainForm : Form
             AutoSize = false,
             AutoEllipsis = true,
             ForeColor = Theme.TextDim,
-            BackColor = Theme.Bg,
+            BackColor = Color.Transparent,
             Font = Theme.Small,
             Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
         };
@@ -306,17 +238,39 @@ public sealed class MainForm : Form
             if (_loading || _selected is not { } p) return;
             p.Enabled = _enabledToggle.Checked;
             _save();
-            foreach (var card in _gameList.Controls.OfType<GameCard>())
+            foreach (var card in _gameList.Controls.OfType<GameRow>())
                 if (card.Profile == p) card.Invalidate();
             _engine.NotifyProfilesChanged();
         };
-        var enabledLabel = new Label { Text = "Profile enabled", AutoSize = true, ForeColor = Theme.TextDim, BackColor = Theme.Bg };
+        var enabledLabel = new Label { Text = "Profile enabled", AutoSize = true, ForeColor = Theme.TextDim, BackColor = Color.Transparent };
+
+        // The library's Play button: the app knows where the game is, so it may as well
+        // start it. The chevron beside it covers the cases where the .exe isn't the thing
+        // you want to launch — a launcher, a mod loader, a shortcut.
+        _playButton = new Button
+        {
+            Text = "▶   PLAY",
+            Font = Theme.Section,
+            Size = new Size(S(150), S(42)),
+        };
+        ControlStyling.StyleButton(_playButton, Theme.Accent, Color.FromArgb(30, 22, 8), Theme.AccentHover);
+        _playButton.Click += (_, _) => PlaySelected();
+
+        var playMenuButton = new Button
+        {
+            Text = "▾",
+            Font = Theme.Base,
+            Size = new Size(S(30), S(42)),
+        };
+        ControlStyling.StyleButton(playMenuButton, Theme.Field, Theme.Text);
+        _tips.SetToolTip(playMenuButton, "What Play launches, and where the game lives");
+        playMenuButton.Click += (_, _) => ShowPlayMenu(playMenuButton);
 
         // Overlay master switch. App-wide rather than per-profile, so it sits under its
         // own separator and turns amber when lifted to flag the non-default state.
         var overlaySeparator = new Panel { Size = new Size(1, S(22)), BackColor = Theme.Border };
         _overlayToggle = new ToggleSwitch { Checked = engine.OverlaysEnabled, Size = new Size(S(44), S(22)) };
-        _overlayLabel = new Label { Text = "Overlays", AutoSize = true, ForeColor = Theme.TextDim, BackColor = Theme.Bg };
+        _overlayLabel = new Label { Text = "Overlays", AutoSize = true, ForeColor = Theme.TextDim, BackColor = Color.Transparent };
         _overlayToggle.CheckedChanged += (_, _) =>
         {
             if (_syncing) return;
@@ -332,7 +286,7 @@ public sealed class MainForm : Form
             Text = "FPS cap",
             AutoSize = true,
             ForeColor = Theme.TextDim,
-            BackColor = Theme.Bg,
+            BackColor = Color.Transparent,
             Anchor = AnchorStyles.Top | AnchorStyles.Right,
         };
         _capPicker = new OptionPicker { Size = new Size(S(120), S(26)), Anchor = AnchorStyles.Top | AnchorStyles.Right };
@@ -356,7 +310,7 @@ public sealed class MainForm : Form
             AutoSize = true,
             Font = Theme.Small,
             ForeColor = NvidiaFrameLimiter.IsAvailable ? Theme.Good : Theme.Accent,
-            BackColor = Theme.Bg,
+            BackColor = Color.Transparent,
             Anchor = AnchorStyles.Top | AnchorStyles.Right,
         };
         _tips.SetToolTip(_capNote, NvidiaFrameLimiter.IsAvailable
@@ -381,6 +335,8 @@ public sealed class MainForm : Form
         header.Controls.Add(_iconBox);
         header.Controls.Add(_nameBox);
         header.Controls.Add(_pathLabel);
+        header.Controls.Add(_playButton);
+        header.Controls.Add(playMenuButton);
         header.Controls.Add(_enabledToggle);
         header.Controls.Add(enabledLabel);
         header.Controls.Add(overlaySeparator);
@@ -393,26 +349,65 @@ public sealed class MainForm : Form
         header.Controls.Add(removeBtn);
         header.Resize += (_, _) =>
         {
+            // Library page: name and path across the top, the Play button under them, and
+            // the switches for this game trailing to its right.
             int rightEdge = header.ClientSize.Width;
-            _nameBox.Width = rightEdge - _nameBox.Left - S(110);
-            _pathLabel.Location = new Point(S(76), _nameBox.Bottom + S(6));
-            _pathLabel.Size = new Size(rightEdge - S(76), _pathLabel.Font.Height + S(4));
-            _enabledToggle.Location = new Point(S(76), _pathLabel.Bottom + S(10));
-            enabledLabel.Location = new Point(_enabledToggle.Right + S(8), _enabledToggle.Top + S(1));
-            overlaySeparator.Location = new Point(enabledLabel.Right + S(18), _enabledToggle.Top);
-            _overlayToggle.Location = new Point(overlaySeparator.Right + S(18), _enabledToggle.Top);
-            _overlayLabel.Location = new Point(_overlayToggle.Right + S(8), _enabledToggle.Top + S(1));
-            // Pinned to the right edge under the Remove button rather than flowing after the
-            // overlay switch, so a narrow window can't push it off the card.
-            _capPicker.Location = new Point(rightEdge - _capPicker.Width, _enabledToggle.Top - S(2));
-            capLabel.Location = new Point(_capPicker.Left - capLabel.Width - S(8), _enabledToggle.Top + S(1));
-            capSeparator.Location = new Point(capLabel.Left - S(18), _enabledToggle.Top);
-            _capNote.Location = new Point(rightEdge - _capNote.Width, _capPicker.Bottom + S(5));
-            removeBtn.Location = new Point(rightEdge - removeBtn.Width, S(6));
-            header.Height = Math.Max(_enabledToggle.Bottom, _capNote.Bottom) + S(14);
+            _nameBox.Width = Math.Max(S(120), rightEdge - _nameBox.Left - S(120));
+            _pathLabel.Location = new Point(S(84), _nameBox.Bottom + S(4));
+            _pathLabel.Size = new Size(rightEdge - S(84), _pathLabel.Font.Height + S(4));
+
+            int rowTop = Math.Max(_iconBox.Bottom, _pathLabel.Bottom) + S(16);
+            _playButton.Location = new Point(0, rowTop);
+            playMenuButton.Location = new Point(_playButton.Right + S(4), rowTop);
+
+            int switchTop = rowTop + (_playButton.Height - _enabledToggle.Height) / 2;
+            _enabledToggle.Location = new Point(playMenuButton.Right + S(26), switchTop);
+            enabledLabel.Location = new Point(_enabledToggle.Right + S(8), switchTop + S(1));
+            overlaySeparator.Location = new Point(enabledLabel.Right + S(18), switchTop);
+            _overlayToggle.Location = new Point(overlaySeparator.Right + S(18), switchTop);
+            _overlayLabel.Location = new Point(_overlayToggle.Right + S(8), switchTop + S(1));
+
+            // The cap group is pinned to the right edge. If the switches would run into it,
+            // it drops to a line of its own rather than the two overlapping.
+            int capWidth = _capPicker.Width + S(8) + capLabel.Width;
+            bool sameRow = rightEdge - capWidth - S(18) > _overlayLabel.Right + S(24);
+            int capTop = sameRow ? switchTop : _playButton.Bottom + S(14);
+
+            _capPicker.Location = new Point(rightEdge - _capPicker.Width, capTop - S(2));
+            capLabel.Location = new Point(_capPicker.Left - capLabel.Width - S(8), capTop + S(1));
+            capSeparator.Visible = sameRow;
+            capSeparator.Location = new Point(capLabel.Left - S(18), capTop);
+            _capNote.Location = new Point(rightEdge - _capNote.Width, _capPicker.Bottom + S(4));
+            removeBtn.Location = new Point(rightEdge - removeBtn.Width, S(8));
+            header.Height = Math.Max(_playButton.Bottom, _capNote.Bottom) + S(18);
         };
 
-        var displaysLabel = new Label { Dock = DockStyle.Top, Height = S(42), Text = "Displays", Font = Theme.Section, ForeColor = Theme.Text, BackColor = Theme.Bg };
+        // Section header with its own action, rather than a lone button in the status bar.
+        var displaysHeader = new Panel { Dock = DockStyle.Top, Height = S(42), BackColor = Theme.Bg };
+        var displaysLabel = new Label
+        {
+            Text = "Displays",
+            Font = Theme.Section,
+            ForeColor = Theme.Text,
+            BackColor = Theme.Bg,
+            AutoSize = true,
+            Location = new Point(0, S(6)),
+        };
+        var refreshBtn = new Button
+        {
+            Text = "Refresh",
+            AutoSize = true,
+            Font = Theme.Small,
+            Padding = new Padding(S(10), S(4), S(10), S(4)),
+            Anchor = AnchorStyles.Top | AnchorStyles.Right,
+        };
+        ControlStyling.StyleButton(refreshBtn, Theme.Field, Theme.Text);
+        _tips.SetToolTip(refreshBtn, "Re-read the connected displays, their HDR state and refresh rates");
+        refreshBtn.Click += (_, _) => LoadSelectedProfile();
+        displaysHeader.Controls.Add(displaysLabel);
+        displaysHeader.Controls.Add(refreshBtn);
+        displaysHeader.Resize += (_, _) =>
+            refreshBtn.Location = new Point(displaysHeader.ClientSize.Width - refreshBtn.Width, S(4));
 
         _displayList = new VerticalCardList
         {
@@ -422,7 +417,7 @@ public sealed class MainForm : Form
         _displayList.ClientSizeChanged += (_, _) => ResizeCards(_displayList);
 
         _content.Controls.Add(_displayList);
-        _content.Controls.Add(displaysLabel);
+        _content.Controls.Add(displaysHeader);
         _content.Controls.Add(header);
 
         // ===== empty state =====
@@ -430,7 +425,8 @@ public sealed class MainForm : Form
         var emptyLabel = new Label
         {
             Dock = DockStyle.Fill,
-            Text = "No games yet.\n\nClick \"+  Add game\" and pick the game's .exe\nto set up per-display HDR rules.",
+            Text = "Your library is empty.\n\nClick \"+  Add game\" and pick the game's .exe.\n"
+                + "Each game gets a Play button, per-display HDR rules and an FPS cap.",
             TextAlign = ContentAlignment.MiddleCenter,
             ForeColor = Theme.TextDim,
             Font = Theme.Header,
@@ -455,6 +451,143 @@ public sealed class MainForm : Form
             _statusLabel.Text = $"Peek hotkey {HotkeyManager.Describe(_config.PeekHotkey)} is already taken by another app";
     }
 
+    /// <summary>What the Play button starts: the launch override if set, else the game's .exe.</summary>
+    private static string LaunchTarget(GameProfile profile) =>
+        string.IsNullOrWhiteSpace(profile.LaunchPath) ? profile.ExePath : profile.LaunchPath;
+
+    private void PlaySelected()
+    {
+        if (_selected is not { } profile)
+            return;
+
+        if (_engine.IsRunning(profile))
+        {
+            _statusLabel.Text = $"{profile.Name} is already running";
+            return;
+        }
+
+        string target = LaunchTarget(profile);
+        if (!File.Exists(target))
+        {
+            MessageBox.Show(this, $"Can't find:\n{target}\n\nUse the ▾ button to pick what Play should launch.",
+                "HDR Toggle", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        try
+        {
+            // UseShellExecute so a shortcut or a launcher URL works, and the working
+            // directory set to the game's own folder — plenty of games rely on that.
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(target)
+            {
+                UseShellExecute = true,
+                WorkingDirectory = Path.GetDirectoryName(target) ?? "",
+            });
+            _statusLabel.Text = $"Launched {Path.GetFileName(target)}";
+            Logger.Log($"Launched {target} for {profile.Name}");
+        }
+        catch (Exception ex)
+        {
+            Logger.Log($"Could not launch {target}: {ex.Message}");
+            MessageBox.Show(this, $"Could not launch:\n{target}\n\n{ex.Message}", "HDR Toggle",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+    }
+
+    /// <summary>The Play button's chevron menu: where the game lives, and what Play runs.</summary>
+    private void ShowPlayMenu(Control anchor)
+    {
+        if (_selected is not { } profile)
+            return;
+
+        var menu = new ContextMenuStrip
+        {
+            Renderer = new ToolStripProfessionalRenderer(new DarkMenuColors()),
+            BackColor = Theme.Field,
+            ForeColor = Theme.Text,
+            ShowImageMargin = false,
+            Font = Theme.Base,
+        };
+
+        var openFolder = new ToolStripMenuItem("Open the game's folder", null, (_, _) => OpenGameFolder(profile))
+        {
+            ForeColor = Theme.Text,
+        };
+        var choose = new ToolStripMenuItem("Choose what Play launches…", null, (_, _) => ChooseLaunchTarget(profile))
+        {
+            ForeColor = Theme.Text,
+        };
+        menu.Items.Add(openFolder);
+        menu.Items.Add(choose);
+
+        if (!string.IsNullOrWhiteSpace(profile.LaunchPath))
+        {
+            var reset = new ToolStripMenuItem($"Reset to {Path.GetFileName(profile.ExePath)}", null, (_, _) =>
+            {
+                profile.LaunchPath = null;
+                _save();
+                LoadSelectedProfile();
+            })
+            {
+                ForeColor = Theme.Text,
+            };
+            menu.Items.Add(reset);
+        }
+
+        menu.Closed += (_, _) => BeginInvoke(menu.Dispose);
+        menu.Show(anchor, new Point(0, anchor.Height));
+    }
+
+    private void OpenGameFolder(GameProfile profile)
+    {
+        string? folder = Path.GetDirectoryName(LaunchTarget(profile));
+        if (folder is null || !Directory.Exists(folder))
+        {
+            _statusLabel.Text = "That folder isn't there any more";
+            return;
+        }
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(folder) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            _statusLabel.Text = $"Could not open the folder: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Points Play at something other than the profiled .exe — a launcher, a mod loader,
+    /// a shortcut. The profile still *watches* its .exe, so the rules fire on the game
+    /// itself however it was started.
+    /// </summary>
+    private void ChooseLaunchTarget(GameProfile profile)
+    {
+        using var dialog = new OpenFileDialog
+        {
+            Title = "What should Play launch?",
+            Filter = "Programs and shortcuts (*.exe;*.lnk;*.bat;*.cmd;*.url)|*.exe;*.lnk;*.bat;*.cmd;*.url|All files (*.*)|*.*",
+            InitialDirectory = Path.GetDirectoryName(profile.ExePath) ?? "",
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+            return;
+
+        profile.LaunchPath = string.Equals(dialog.FileName, profile.ExePath, StringComparison.OrdinalIgnoreCase)
+            ? null
+            : dialog.FileName;
+        _save();
+        LoadSelectedProfile();
+    }
+
+    private void ShowSettings()
+    {
+        using var settings = new SettingsForm(_config, _save, _hotkeys, AppVersion, BuildStamp);
+        settings.ShowDialog(this);
+        // The peek combo may have changed while the dialog was open.
+        ApplyHotkeyTooltip();
+        UpdateStatus();
+    }
+
     /// <summary>Mirrors engine state into the controls; the engine is the source of truth.</summary>
     private void SyncEngineState()
     {
@@ -462,18 +595,32 @@ public sealed class MainForm : Form
         _overlayToggle.Checked = _engine.OverlaysEnabled;
         _overlayLabel.ForeColor = _engine.OverlaysEnabled ? Theme.TextDim : Theme.Accent;
         _syncing = false;
+
+        foreach (var row in _gameList.Controls.OfType<GameRow>())
+            row.Running = _engine.IsRunning(row.Profile);
+        UpdatePlayButton();
         UpdateStatus();
     }
 
-    /// <summary>(Re-)registers the configured peek hotkey and reports a clash in the status bar.</summary>
-    private void ApplyHotkey()
+    /// <summary>
+    /// Play doubles as the running indicator, the way a library does it. It stays clickable
+    /// while the game is up — a disabled flat button paints its own grey and loses the
+    /// colour that carries the state — and the click just says so instead of launching a
+    /// second copy.
+    /// </summary>
+    private void UpdatePlayButton()
     {
-        bool ok = _hotkeys.Register(_config.PeekHotkey);
-        ApplyHotkeyTooltip();
-        if (!ok)
-            _statusLabel.Text = $"{HotkeyManager.Describe(_config.PeekHotkey)} is already taken by another app — pick another";
-        else
-            UpdateStatus();
+        if (_selected is not { } profile)
+            return;
+
+        bool running = _engine.IsRunning(profile);
+        _playButton.Text = running ? "●   RUNNING" : "▶   PLAY";
+        _playButton.BackColor = running ? Theme.Field : Theme.Accent;
+        _playButton.ForeColor = running ? Theme.Good : Color.FromArgb(30, 22, 8);
+        _playButton.FlatAppearance.MouseOverBackColor = running ? Theme.CardHover : Theme.AccentHover;
+        _tips.SetToolTip(_playButton, running
+            ? $"{profile.ProcessName}.exe is running — its rules are applied"
+            : $"Launch {LaunchTarget(profile)}");
     }
 
     private void ApplyHotkeyTooltip()
@@ -551,16 +698,17 @@ public sealed class MainForm : Form
 
         foreach (var p in _config.Profiles)
         {
-            var card = new GameCard
+            var row = new GameRow
             {
                 Profile = p,
                 GameIcon = GetGameIcon(p),
-                Height = S(78),
-                Margin = new Padding(0, 0, 0, S(12)),
+                Running = _engine.IsRunning(p),
+                Height = S(56),
+                Margin = new Padding(0, 0, 0, S(2)),
             };
-            card.Click += (_, _) => SelectProfile(card.Profile);
-            _tips.SetToolTip(card, p.ExePath);
-            _gameList.Controls.Add(card);
+            row.Click += (_, _) => SelectProfile(row.Profile);
+            _tips.SetToolTip(row, p.ExePath);
+            _gameList.Controls.Add(row);
         }
         ResizeCards(_gameList);
         _gameList.ResumeLayout();
@@ -578,7 +726,7 @@ public sealed class MainForm : Form
     private void SelectProfile(GameProfile p)
     {
         _selected = p;
-        foreach (var card in _gameList.Controls.OfType<GameCard>())
+        foreach (var card in _gameList.Controls.OfType<GameRow>())
             card.Selected = card.Profile == p;
         LoadSelectedProfile();
     }
@@ -632,11 +780,14 @@ public sealed class MainForm : Form
             return;
         _loading = true;
         _nameBox.Text = p.Name;
-        _pathLabel.Text = p.ExePath;
+        _pathLabel.Text = string.IsNullOrWhiteSpace(p.LaunchPath)
+            ? p.ExePath
+            : $"{p.ExePath}      ▸ Play launches {p.LaunchPath}";
         _tips.SetToolTip(_pathLabel, p.ExePath);
         _iconBox.Image = GetGameIcon(p);
         _enabledToggle.Checked = p.Enabled;
         _loading = false;
+        UpdatePlayButton();
         PopulateDisplayCards();
     }
 
@@ -927,15 +1078,6 @@ public sealed class MainForm : Form
     };
 
     private void UpdateStatus() => _statusLabel.Text = _engine.StatusText;
-
-    protected override void OnDeactivate(EventArgs e)
-    {
-        base.OnDeactivate(e);
-        // If the window is hidden or backgrounded mid-capture the field may never see
-        // LostFocus, which would leave the suspended hotkey dead. Ending the capture
-        // here re-registers it through CaptureEnded; it's a no-op when not capturing.
-        _hotkeyBox.CancelCapture();
-    }
 
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
