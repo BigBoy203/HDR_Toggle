@@ -31,12 +31,12 @@ public sealed class RuleEngine
     private readonly OverlayManager _overlays = new();
 
     /// <summary>
-    /// How many times the cap has been re-applied for the games currently running. A game
-    /// that sets its own display mode on the way into exclusive fullscreen would otherwise
-    /// have us switching modes at each other forever, so the correcting stops after
-    /// <see cref="MaxCapCorrections"/> and says so in the log.
+    /// How many times the cap has been re-applied per display for the games currently
+    /// running. A game that sets its own display mode on the way into exclusive fullscreen
+    /// would otherwise have us switching modes at each other forever, so the correcting
+    /// stops after <see cref="MaxCapCorrections"/> and the status says the cap isn't holding.
     /// </summary>
-    private int _capCorrections;
+    private readonly Dictionary<string, int> _capCorrections = new();
 
     private const int MaxCapCorrections = 5;
 
@@ -46,6 +46,14 @@ public sealed class RuleEngine
     /// the current rates, not re-enumerate every mode the displays support.
     /// </summary>
     private readonly Dictionary<string, int> _capTargets = new();
+
+    /// <summary>
+    /// What the displays are actually running at against the cap, refreshed on every poll.
+    /// Empty when no cap is in force. This is the answer to "is the cap even working?" —
+    /// if it reads 60 Hz and the game still shows 120 fps, the game isn't syncing to the
+    /// display and no refresh rate will hold it.
+    /// </summary>
+    public string CapStatus { get; private set; } = "";
 
     /// <summary>Transient one-off message for the status bar.</summary>
     public event Action<string>? StatusChanged;
@@ -116,7 +124,7 @@ public sealed class RuleEngine
             if (!OverlaysEnabled)
                 return running.Length > 0 ? $"Overlays lifted — {running} running" : "Overlays lifted";
             if (running.Length > 0)
-                return $"Running: {running}";
+                return CapStatus.Length > 0 ? $"Running: {running} — {CapStatus}" : $"Running: {running}";
 
             int enabled = _config.Profiles.Count(p => p.Enabled);
             return $"Watching {enabled} game{(enabled == 1 ? "" : "s")}";
@@ -202,7 +210,7 @@ public sealed class RuleEngine
             Apply(path, action == LaunchAction.TurnOn);
         }
 
-        _capCorrections = 0;
+        _capCorrections.Clear();
         ApplyFrameCap(ActiveFrameCap());
 
         foreach (var (path, action) in profile.OverlayRules)
@@ -301,7 +309,10 @@ public sealed class RuleEngine
     {
         _capTargets.Clear();
         if (hz <= 0)
+        {
+            CapStatus = "";
             return;
+        }
 
         foreach (var display in DisplaysForCap())
         {
@@ -322,29 +333,58 @@ public sealed class RuleEngine
     /// </summary>
     public void HoldFrameCap()
     {
-        if (_capTargets.Count == 0 || _active.Count == 0 || _capCorrections >= MaxCapCorrections)
+        if (_capTargets.Count == 0 || _active.Count == 0)
             return;
+
+        int over = 0, held = 0;
+        int highest = 0;
 
         foreach (var display in DisplaysForCap())
         {
-            if (!_capTargets.TryGetValue(display.DevicePath, out int target) || display.RefreshHz <= target)
+            if (!_capTargets.TryGetValue(display.DevicePath, out int target))
                 continue;
 
-            _capCorrections++;
+            highest = Math.Max(highest, display.RefreshHz);
+            if (display.RefreshHz <= target)
+            {
+                held++;
+                continue;
+            }
+
+            over++;
+            int done = _capCorrections.GetValueOrDefault(display.DevicePath);
+            if (done >= MaxCapCorrections)
+                continue;
+
+            _capCorrections[display.DevicePath] = done + 1;
             Logger.Log($"{display.FriendlyName} came back at {display.RefreshHz} Hz; re-applying the {target} Hz cap "
-                + $"({_capCorrections}/{MaxCapCorrections}).");
+                + $"({done + 1}/{MaxCapCorrections}).");
             ApplyRate(display.DevicePath, target, display);
 
-            if (_capCorrections == 1)
-                StatusChanged?.Invoke($"Re-applied the {target} Hz cap — the game had changed the display mode");
-
-            if (_capCorrections >= MaxCapCorrections)
+            if (done + 1 >= MaxCapCorrections)
             {
-                Logger.Log("The game keeps setting its own display mode; leaving it alone now. "
-                    + "Turn V-Sync on in the game, or pick its in-game refresh rate, for the cap to hold.");
-                return;
+                Logger.Log($"{display.FriendlyName} keeps going back to its own mode; leaving it alone now. "
+                    + "The game is choosing the display mode itself — set its refresh rate in the game's own "
+                    + "video settings, and turn V-Sync on, or cap the frame rate in the GPU driver instead.");
             }
         }
+
+        // The whole point of this readout: it separates "the display isn't capped" from
+        // "the display is capped and the game is ignoring it".
+        string status = over > 0
+            ? $"cap not holding, {highest} Hz"
+            : held > 0 ? $"displays at {CapRateText()}" : "";
+        if (status == CapStatus)
+            return;
+        CapStatus = status;
+        StateChanged?.Invoke();
+    }
+
+    /// <summary>The target rate when every display shares one, else the range across them.</summary>
+    private string CapRateText()
+    {
+        int min = _capTargets.Values.Min(), max = _capTargets.Values.Max();
+        return min == max ? $"{min} Hz" : $"{min}–{max} Hz";
     }
 
     /// <summary>The lowest cap asked for by the profiles currently running; 0 when none caps.</summary>
@@ -401,6 +441,8 @@ public sealed class RuleEngine
     private void RestoreRefreshRates()
     {
         _capTargets.Clear();
+        _capCorrections.Clear();
+        CapStatus = "";
         if (_config.RefreshRateSnapshot is null)
             return;
 

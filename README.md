@@ -27,10 +27,15 @@ as long as the game runs, and restores what they were on the moment it exits.
   below it, so a mixed 144/60 Hz desk still ends up under the cap everywhere.
 - The cap never changes resolution or colour depth, and a rate the panel rejects is refused
   before it is applied rather than dropping you to a black screen.
+- **The status bar says whether it's working.** While a game runs, the status line (and the
+  tray tooltip) reads `Running: GTAIV — displays at 60 Hz` or `cap not holding, 144 Hz`.
+  That distinguishes the two failures: a display that isn't capped, versus a display that
+  *is* capped while the game ignores it — the second means the game isn't syncing to the
+  display, and no refresh rate will hold it.
 - **It holds the cap.** A game that sets its own display mode on the way into exclusive
   fullscreen would otherwise undo it, so any display that comes back above the cap is put
-  back — up to five times per session, after which it stops rather than fighting the game
-  over the display mode forever. Check `log.txt` if you're unsure which happened.
+  back — up to five times per display per session, after which it stops rather than
+  fighting the game over the display mode forever. `log.txt` records each correction.
 - Unlike HDR there's no "leave it as the game set it" choice: the rate is always restored.
   If the app is killed mid-game, the leftover rate is restored on next start, same as HDR.
 - Variable-refresh (G-Sync/FreeSync) displays follow the same rule: the chosen rate is the
