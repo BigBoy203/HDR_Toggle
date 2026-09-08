@@ -20,7 +20,8 @@ public enum AppState
 
 /// <summary>
 /// Applies launch rules when a profiled game starts and exit rules (default:
-/// restore the pre-launch HDR state) when the last profiled game stops.
+/// restore the pre-launch HDR state) when the last profiled game stops. Any
+/// refresh-rate cap the launch rules applied is always lifted on the way out.
 /// </summary>
 public sealed class RuleEngine
 {
@@ -119,7 +120,7 @@ public sealed class RuleEngine
     /// </summary>
     public void RecoverOnStartup(Func<string, bool> isProcessRunning)
     {
-        if (_config.HdrSnapshot is null)
+        if (_config.HdrSnapshot is null && _config.RefreshRateSnapshot is null)
         {
             _config.ActiveGames.Clear();
             return;
@@ -137,9 +138,11 @@ public sealed class RuleEngine
             return;
         }
 
-        Logger.Log("Restoring HDR snapshot left over from a previous session.");
+        Logger.Log("Restoring display snapshot left over from a previous session.");
+        RestoreRefreshRates();
         RestoreSnapshot();
         _config.HdrSnapshot = null;
+        _config.RefreshRateSnapshot = null;
         _config.ActiveGames.Clear();
         _save();
     }
@@ -159,6 +162,16 @@ public sealed class RuleEngine
                 Logger.Log($"Failed to snapshot HDR state: {ex.Message}");
                 _config.HdrSnapshot = null;
             }
+
+            try
+            {
+                _config.RefreshRateSnapshot = RefreshRateController.SnapshotRates();
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Failed to snapshot refresh rates: {ex.Message}");
+                _config.RefreshRateSnapshot = null;
+            }
         }
 
         _active.Add(profile.ProcessName);
@@ -171,6 +184,9 @@ public sealed class RuleEngine
                 continue;
             Apply(path, action == LaunchAction.TurnOn);
         }
+
+        foreach (var (path, hz) in profile.RefreshRateRules)
+            ApplyRate(path, hz);
 
         foreach (var (path, action) in profile.OverlayRules)
             _overlays.Apply(path, action);
@@ -228,6 +244,11 @@ public sealed class RuleEngine
             }
         }
 
+        // Last: switching HDR can itself change the display mode, so the rate goes back
+        // after that has settled. This re-enumerates displays for itself, so the list
+        // used above stays valid.
+        RestoreRefreshRates();
+
         _overlays.CloseAll();
 
         // A peek is meant to last a moment. Re-arm the overlays now that nothing is
@@ -240,6 +261,7 @@ public sealed class RuleEngine
         }
 
         _config.HdrSnapshot = null;
+        _config.RefreshRateSnapshot = null;
         _save();
         StateChanged?.Invoke();
         StatusChanged?.Invoke($"Applied exit rules for {profile.Name}");
@@ -251,6 +273,49 @@ public sealed class RuleEngine
             return;
         foreach (var (path, enabled) in _config.HdrSnapshot)
             Apply(path, enabled);
+    }
+
+    /// <summary>
+    /// Puts every display back on the refresh rate it had before the first game launched.
+    /// A cap is never left behind: unlike HDR there is no "leave it as the game set it"
+    /// option, because a monitor silently stuck at 60 Hz is a bug report, not a setting.
+    /// </summary>
+    private void RestoreRefreshRates()
+    {
+        if (_config.RefreshRateSnapshot is null)
+            return;
+
+        List<DisplayInfo> displays;
+        try
+        {
+            displays = HdrController.GetDisplays();
+        }
+        catch (Exception ex)
+        {
+            Logger.Log($"Failed to enumerate displays to restore refresh rates: {ex.Message}");
+            return;
+        }
+
+        foreach (var display in displays)
+        {
+            if (_config.RefreshRateSnapshot.TryGetValue(display.DevicePath, out int previous) && previous != display.RefreshHz)
+                ApplyRate(display.DevicePath, previous, display);
+        }
+    }
+
+    private static void ApplyRate(string devicePath, int hz, DisplayInfo? display = null)
+    {
+        try
+        {
+            bool ok = display is not null
+                ? RefreshRateController.SetRate(display.GdiDeviceName, hz)
+                : RefreshRateController.SetRateByPath(devicePath, hz);
+            Logger.Log($"Set {hz} Hz for {devicePath}: {(ok ? "ok" : "failed/not available")}");
+        }
+        catch (Exception ex)
+        {
+            Logger.Log($"Error setting refresh rate for {devicePath}: {ex.Message}");
+        }
     }
 
     private static void Apply(string devicePath, bool enable, DisplayInfo? display = null)

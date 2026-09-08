@@ -18,6 +18,8 @@ public sealed class MainForm : Form
     private const string ExitOff = "Turn HDR off";
     private static readonly string[] ExitOptions = { ExitRestore, ExitNoChange, ExitOn, ExitOff };
 
+    private const string CapNone = "No cap";
+
     private const string OverlayNone = "Do nothing";
     private const string OverlayBlackout = "Black out screen";
     private const string OverlayDim = "Dim screen";
@@ -540,13 +542,19 @@ public sealed class MainForm : Form
         }
 
         foreach (var d in displays)
-            _displayList.Controls.Add(BuildDisplayCard(profile, d.DevicePath, d.FriendlyName, d.SupportsHdr, connected: true));
+        {
+            var rates = SafeGetRates(d);
+            _displayList.Controls.Add(BuildDisplayCard(profile, d.DevicePath, d.FriendlyName, d.SupportsHdr,
+                connected: true, d.RefreshHz, rates));
+        }
 
         var connected = displays.Select(d => d.DevicePath).ToHashSet();
         var orphaned = profile.LaunchRules.Keys.Concat(profile.ExitRules.Keys).Concat(profile.OverlayRules.Keys)
+            .Concat(profile.RefreshRateRules.Keys)
             .Where(path => !connected.Contains(path)).Distinct().ToList();
         foreach (var path in orphaned)
-            _displayList.Controls.Add(BuildDisplayCard(profile, path, "Disconnected display", supportsHdr: true, connected: false));
+            _displayList.Controls.Add(BuildDisplayCard(profile, path, "Disconnected display", supportsHdr: true,
+                connected: false, refreshHz: 0, rates: Array.Empty<int>()));
 
         ResizeCards(_displayList);
         _displayList.ResumeLayout();
@@ -557,7 +565,22 @@ public sealed class MainForm : Form
             _statusLabel.Text = error;
     }
 
-    private CardPanel BuildDisplayCard(GameProfile profile, string path, string name, bool supportsHdr, bool connected)
+    /// <summary>Refresh rates a display offers; an enumeration failure just means no cap row.</summary>
+    private static IReadOnlyList<int> SafeGetRates(DisplayInfo display)
+    {
+        try
+        {
+            return RefreshRateController.GetAvailableRates(display.GdiDeviceName);
+        }
+        catch (Exception ex)
+        {
+            Logger.Log($"Could not list refresh rates for {display.FriendlyName}: {ex.Message}");
+            return Array.Empty<int>();
+        }
+    }
+
+    private CardPanel BuildDisplayCard(GameProfile profile, string path, string name, bool supportsHdr, bool connected,
+        int refreshHz, IReadOnlyList<int> rates)
     {
         var card = new CardPanel { Height = S(92), Margin = new Padding(0, 0, 0, S(10)) };
 
@@ -572,6 +595,8 @@ public sealed class MainForm : Form
         };
 
         string badgeText = !connected ? "Not connected" : supportsHdr ? "HDR capable" : "HDR not supported";
+        if (connected && refreshHz > 0)
+            badgeText += $"  ·  {refreshHz} Hz";
         var badge = new Label
         {
             Text = badgeText,
@@ -589,12 +614,14 @@ public sealed class MainForm : Form
         // Each rule row: dim label on the left of an OptionPicker, anchored to the card's right edge.
         var rows = new List<(Label Label, OptionPicker Picker)>();
 
-        void AddRow(string labelText, string[] options, string value, Action<string> onChanged)
+        void AddRow(string labelText, IEnumerable<string> options, string value, Action<string> onChanged, string? tip = null)
         {
             var picker = new OptionPicker { Size = new Size(S(190), S(28)) };
             picker.Options.AddRange(options);
             picker.Value = value;
             picker.ValueChanged += (_, _) => onChanged(picker.Value);
+            if (tip is not null)
+                _tips.SetToolTip(picker, tip);
             var label = new Label
             {
                 Text = labelText,
@@ -630,6 +657,34 @@ public sealed class MainForm : Form
             });
         }
 
+        // The cap works on every display, HDR or not. It is only worth offering when the
+        // display has more than one rate to choose between — or when a saved rule is
+        // already there to be seen and changed.
+        int cappedHz = profile.RefreshRateRules.GetValueOrDefault(path);
+        if (rates.Count > 1 || cappedHz != 0)
+        {
+            var capOptions = new List<string> { CapNone };
+            capOptions.AddRange(rates.Select(RateToText));
+            // A saved rule the display no longer offers (resolution changed, monitor
+            // swapped) still belongs in the list, or picking it up would silently drop it.
+            if (cappedHz != 0 && !rates.Contains(cappedHz))
+                capOptions.Add(RateToText(cappedHz));
+
+            AddRow("Frame rate cap", capOptions, cappedHz == 0 ? CapNone : RateToText(cappedHz), v =>
+            {
+                int hz = TextToRate(v);
+                if (hz == 0)
+                    profile.RefreshRateRules.Remove(path);
+                else
+                    profile.RefreshRateRules[path] = hz;
+                _save();
+            },
+            "Holds this display at the chosen refresh rate while the game runs, and puts it back\n"
+            + "the moment the game exits. A game presenting in sync with the display can't draw\n"
+            + "more frames than the display refreshes, so this is the cap — turn V-Sync on in the\n"
+            + "game, or it will still run free in exclusive fullscreen.");
+        }
+
         // Overlays work on every display, HDR or not.
         AddRow("While playing", OverlayOptions, OverlayToText(profile.OverlayRules.GetValueOrDefault(path)), v =>
         {
@@ -658,6 +713,11 @@ public sealed class MainForm : Form
 
         return card;
     }
+
+    private static string RateToText(int hz) => $"{hz} Hz";
+
+    private static int TextToRate(string s) =>
+        int.TryParse(s.AsSpan(0, Math.Max(s.IndexOf(' '), 0)), out int hz) ? hz : 0;
 
     private static string OverlayToText(OverlayAction a) => a switch
     {

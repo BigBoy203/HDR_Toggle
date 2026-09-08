@@ -12,6 +12,9 @@ public sealed class DisplayInfo
     internal uint TargetId { get; init; }
     public bool SupportsHdr { get; init; }
     public bool HdrEnabled { get; init; }
+
+    /// <summary>Refresh rate the display is running at, in Hz; 0 when it can't be read.</summary>
+    public int RefreshHz { get; init; }
 }
 
 /// <summary>Enumerates displays and gets/sets per-display HDR using the CCD API.</summary>
@@ -86,6 +89,7 @@ public static class HdrController
                 TargetId = target.id,
                 SupportsHdr = supportsHdr,
                 HdrEnabled = hdrEnabled,
+                RefreshHz = RefreshRateController.GetCurrentRate(gdiName),
             });
         }
 

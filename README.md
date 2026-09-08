@@ -1,13 +1,34 @@
 # HDR Toggle
 
-A small Windows tray app that automatically switches HDR on or off per display when a game you've profiled launches, and restores things when it exits.
+A small Windows tray app that automatically switches HDR on or off per display — and caps the frame rate — when a game you've profiled launches, and restores things when it exits.
 
 ## How it works
 
 1. **Add a game** — point the app at the game's `.exe`. It shows up as a tile with the game's icon.
 2. **Set rules per display** — each connected monitor gets a card; choose what happens when the game launches (*Turn HDR on / Turn HDR off / No change*) and when it exits (*Restore previous* — the default, *Turn HDR on / off*, or *No change*).
-3. **While playing** (every display, HDR or not) — optionally *Black out screen* or *Dim screen* for the duration of the game. This is a pure overlay window (click-through, never steals focus, hidden from Alt+Tab) — no display settings are touched, and it disappears the moment the game closes.
-4. The app watches the process list from the system tray (polling every 2 seconds). When the game appears it snapshots the current HDR state of every display, applies your launch rules, and when the game closes it applies the exit rules (restoring the snapshot by default).
+3. **Cap the frame rate** — pick a refresh rate for a display and it is held there for as long as the game runs, then put straight back (see below).
+4. **While playing** (every display, HDR or not) — optionally *Black out screen* or *Dim screen* for the duration of the game. This is a pure overlay window (click-through, never steals focus, hidden from Alt+Tab) — no display settings are touched, and it disappears the moment the game closes.
+5. The app watches the process list from the system tray (polling every 2 seconds). When the game appears it snapshots the current HDR state and refresh rate of every display, applies your launch rules, and when the game closes it applies the exit rules (restoring the snapshot by default).
+
+## Capping the frame rate
+
+Some engines tie physics, animation or input to the frame rate and come apart above the
+speed they were written for. The **Frame rate cap** row on a display card drops that
+display to the refresh rate you choose while the game runs, and restores the rate it was
+on the moment the game exits.
+
+- The cap is the refresh rate, so a game that presents in sync with the display can't draw
+  more frames than the display refreshes. That covers V-Sync and, usually, a borderless
+  window paced by the desktop compositor. **In exclusive fullscreen with V-Sync off the
+  game still runs free** — turn V-Sync on for the cap to bite.
+- Only the rates the display already offers at its current resolution are listed. The cap
+  never changes resolution or colour depth, and a rate the panel rejects is refused
+  before it is applied rather than dropping you to a black screen.
+- Displays with a single available rate don't get the row — there is nothing to pick.
+- Unlike HDR there's no "leave it as the game set it" choice: the rate is always restored.
+  If the app is killed mid-game, the leftover rate is restored on next start, same as HDR.
+- Variable-refresh (G-Sync/FreeSync) displays follow the same rule: the chosen rate is the
+  ceiling.
 
 ## Peeking at your other monitors
 
@@ -48,15 +69,19 @@ The icon carries a status dot so you can tell what the app is doing at a glance:
 ### Command-line helpers
 
 ```
-HdrToggle --list              list displays and their HDR state
+HdrToggle --list              list displays, their HDR state and refresh rates
 HdrToggle --set <index> on    turn HDR on/off for a display (for testing)
+HdrToggle --rate <index> 60   switch a display to a refresh rate (for testing)
 ```
 
 ## Notes
 
 - HDR is switched via the Windows CCD API (`DisplayConfigSetDeviceInfo`): the Windows 11 24H2+ `SET_HDR_STATE` call, falling back to `SET_ADVANCED_COLOR_STATE` on older builds. No admin rights required.
+- The frame rate cap is a refresh-rate switch through the GDI mode API
+  (`ChangeDisplaySettingsEx` with `dmDisplayFrequency`, resolution and colour depth left
+  alone). No overlay, no injection into the game, no admin rights.
 - Displays are identified by their stable monitor device path, so rules survive reboots and display re-ordering. Rules for a disconnected monitor show as "(Disconnected display)" and are skipped safely.
-- If the app was killed while a game was running, on next start it restores the leftover HDR snapshot (unless the game is still running).
+- If the app was killed while a game was running, on next start it restores the leftover HDR and refresh-rate snapshot (unless the game is still running).
 - If two profiled games overlap, restore happens only after the last one exits, using the snapshot taken before the first launched.
 
 ## Building

@@ -36,6 +36,14 @@ public class GameProfile
     public Dictionary<string, ExitAction> ExitRules { get; set; } = new();
     public Dictionary<string, OverlayAction> OverlayRules { get; set; } = new();
 
+    /// <summary>
+    /// Refresh rate (Hz) to hold a display at while the game runs, keyed by monitor
+    /// device path. A missing entry means "leave it alone". This is the frame rate cap:
+    /// the display can't present faster than it refreshes, so a game running with V-Sync
+    /// is pinned to this number. Always restored to the pre-launch rate on exit.
+    /// </summary>
+    public Dictionary<string, int> RefreshRateRules { get; set; } = new();
+
     [JsonIgnore]
     public string ProcessName => Path.GetFileNameWithoutExtension(ExePath);
 
@@ -69,6 +77,9 @@ public class AppConfig
 
     /// <summary>HDR state per display path captured before the first game launched; null when no game is active.</summary>
     public Dictionary<string, bool>? HdrSnapshot { get; set; }
+
+    /// <summary>Refresh rate (Hz) per display path captured before the first game launched; null when no game is active.</summary>
+    public Dictionary<string, int>? RefreshRateSnapshot { get; set; }
 
     /// <summary>Process names of profiled games currently running (persisted for crash recovery).</summary>
     public List<string> ActiveGames { get; set; } = new();
