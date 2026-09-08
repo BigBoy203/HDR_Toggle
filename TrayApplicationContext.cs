@@ -31,6 +31,7 @@ public sealed class TrayApplicationContext : ApplicationContext
 
     public TrayApplicationContext(bool startHidden)
     {
+        Logger.Log($"HDR Toggle {Application.ProductVersion.Split('+')[0]} starting.");
         _config = ConfigStore.Load();
         _engine = new RuleEngine(_config, Save);
         _engine.RecoverOnStartup(IsProcessRunning);

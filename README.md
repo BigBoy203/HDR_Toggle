@@ -91,6 +91,10 @@ The icon carries a status dot so you can tell what the app is doing at a glance:
 
 ## Running it
 
+- The version in the bottom-left corner names the build; its tooltip adds the build time and
+  whether driver-level frame limiting is available, which is the quick way to confirm a
+  rebuild actually replaced the running exe. The same version line is written to `log.txt`
+  at every start.
 - Published exe: `bin\Release\net10.0-windows\win-x64\publish\HdrToggle.exe` (framework-dependent; needs the .NET 10 Desktop Runtime).
 - **Start with Windows**: checkbox in the app — writes a `HKCU\...\Run` entry that launches the app minimized to the tray (`--tray`).
 - Config lives in `%APPDATA%\HdrToggle\config.json`; a small activity log is written to `%APPDATA%\HdrToggle\log.txt`. If the config ever fails to parse it is copied to `config.bad.json` before the app starts fresh, so profiles are recoverable.

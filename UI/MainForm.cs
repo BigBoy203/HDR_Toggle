@@ -66,6 +66,25 @@ public sealed class MainForm : Form
         (Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
          ?? Application.ProductVersion).Split('+')[0];
 
+    /// <summary>
+    /// When this .exe was built, from its own timestamp on disk. The version number only
+    /// moves when it is bumped, so this is what answers "am I running what I just built?".
+    /// </summary>
+    private static string BuildStamp
+    {
+        get
+        {
+            try
+            {
+                return File.GetLastWriteTime(Application.ExecutablePath).ToString("yyyy-MM-dd HH:mm");
+            }
+            catch
+            {
+                return "unknown";
+            }
+        }
+    }
+
     /// <summary>Scales a 96-dpi design value to the window's DPI.</summary>
     private int S(int v) => (int)Math.Round(v * DeviceDpi / 96.0);
 
@@ -105,7 +124,9 @@ public sealed class MainForm : Form
             Margin = new Padding(0, S(22), 0, 0),
             Text = $"v{AppVersion}",
         };
-        _tips.SetToolTip(versionLabel, $"HDR Toggle {AppVersion}\nSettings and log: {ConfigStore.ConfigDir}");
+        _tips.SetToolTip(versionLabel, $"HDR Toggle {AppVersion}, built {BuildStamp}"
+            + $"\nDriver frame rate limiting: {(NvidiaFrameLimiter.IsAvailable ? "on (NVIDIA)" : NvidiaFrameLimiter.UnavailableReason)}"
+            + $"\nSettings and log: {ConfigStore.ConfigDir}");
         var statusDivider = new Panel
         {
             Size = new Size(1, S(14)),
