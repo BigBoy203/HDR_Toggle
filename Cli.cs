@@ -8,7 +8,8 @@ namespace HdrToggle;
 ///   HdrToggle --list                 list displays, HDR state and refresh rates
 ///   HdrToggle --set &lt;index&gt; on|off   toggle HDR on a display
 ///   HdrToggle --rate &lt;index&gt; &lt;hz&gt;    switch a display's refresh rate
-///   HdrToggle --fps &lt;exe&gt; [n|off]    read or set the NVIDIA per-game frame rate limit
+///   HdrToggle --fps &lt;exe&gt; [n|off]    set the NVIDIA per-game frame rate limit; with no
+///                                    value, dumps every setting on the game's profile
 /// </summary>
 internal static class Cli
 {
@@ -121,5 +122,9 @@ internal static class Cli
             0 => $"{exe}: no driver frame rate limit",
             int limit => $"{exe}: driver frame rate limit is {limit} FPS",
         });
+
+        // The full dump is what identifies the setting the control panel really writes.
+        Console.WriteLine();
+        Console.WriteLine(NvidiaFrameLimiter.DescribeProfile(exe));
     }
 }

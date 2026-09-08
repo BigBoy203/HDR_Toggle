@@ -30,8 +30,9 @@ as long as the game runs, and restores what they were on the moment it exits.
     the profile. You can see and clear it by hand in the NVIDIA Control Panel.
   - It keys off the profile's .exe name, so point the profile at the game itself
     (`GTAIV.exe`, `EFLC.exe`) rather than at a launcher.
-  - On AMD or Intel this part is skipped and the cap is the refresh rate alone; the picker's
-    tooltip says which you're getting.
+  - On AMD or Intel this part is skipped and the cap is the refresh rate alone. The header
+    says which you're getting, under the picker: *hard limit via NVIDIA driver*, or
+    *NVIDIA GPU required — refresh rate only*.
 - The refresh-rate half of the cap only bites on a game that presents in sync with the
   display: V-Sync on, or usually a borderless window paced by the desktop compositor. **In
   exclusive fullscreen with V-Sync off it does nothing on its own** — that is what the
@@ -106,8 +107,13 @@ HdrToggle --list              list displays, their HDR state and refresh rates
 HdrToggle --set <index> on    turn HDR on/off for a display (for testing)
 HdrToggle --rate <index> 60   switch a display to a refresh rate (for testing)
 HdrToggle --fps GTAIV.exe 60  set the NVIDIA per-game frame rate limit ("off" clears it)
-HdrToggle --fps GTAIV.exe     read it back
+HdrToggle --fps GTAIV.exe     read it back, and dump every setting on the game's profile
 ```
+
+`--fps <exe>` with no value prints the whole driver profile: which profile claims the .exe
+and every setting on it by id and value. That is how to check what the control panel really
+writes — set *Max Frame Rate* by hand in the NVIDIA Control Panel, run it, and compare. The
+app logs the same dump to `log.txt` whenever a limit it wrote doesn't read back as asked.
 
 ## Notes
 

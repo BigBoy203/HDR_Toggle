@@ -47,6 +47,7 @@ public sealed class MainForm : Form
     private readonly ToggleSwitch _overlayToggle;
     private readonly Label _overlayLabel;
     private readonly OptionPicker _capPicker;
+    private readonly Label _capNote;
     private readonly HotkeyBox _hotkeyBox;
     private readonly ToolTip _tips = new();
     private readonly Dictionary<string, Image> _iconCache = new(StringComparer.OrdinalIgnoreCase);
@@ -344,6 +345,28 @@ public sealed class MainForm : Form
         };
         _tips.SetToolTip(_capPicker, CapTooltip());
 
+        // A hard frame rate limit needs the NVIDIA driver. Say so where the setting is,
+        // not only in a tooltip: on any other GPU this picker can only move the refresh
+        // rate, which a game is free to ignore.
+        _capNote = new Label
+        {
+            Text = NvidiaFrameLimiter.IsAvailable
+                ? "hard limit via NVIDIA driver"
+                : "NVIDIA GPU required — refresh rate only",
+            AutoSize = true,
+            Font = Theme.Small,
+            ForeColor = NvidiaFrameLimiter.IsAvailable ? Theme.Good : Theme.Accent,
+            BackColor = Theme.Bg,
+            Anchor = AnchorStyles.Top | AnchorStyles.Right,
+        };
+        _tips.SetToolTip(_capNote, NvidiaFrameLimiter.IsAvailable
+            ? "The cap is written to this game's NVIDIA driver profile as Max Frame Rate, which\n"
+                + "holds the game itself. The displays are moved to the same rate as a second line\n"
+                + "of defence."
+            : $"No NVIDIA driver here: {NvidiaFrameLimiter.UnavailableReason}.\n"
+                + "The cap can only lower the displays' refresh rate, which caps a game just while\n"
+                + "it presents in sync with the display — V-Sync on, and not in exclusive fullscreen.");
+
         var removeBtn = new Button
         {
             Text = "Remove",
@@ -366,6 +389,7 @@ public sealed class MainForm : Form
         header.Controls.Add(capSeparator);
         header.Controls.Add(capLabel);
         header.Controls.Add(_capPicker);
+        header.Controls.Add(_capNote);
         header.Controls.Add(removeBtn);
         header.Resize += (_, _) =>
         {
@@ -383,8 +407,9 @@ public sealed class MainForm : Form
             _capPicker.Location = new Point(rightEdge - _capPicker.Width, _enabledToggle.Top - S(2));
             capLabel.Location = new Point(_capPicker.Left - capLabel.Width - S(8), _enabledToggle.Top + S(1));
             capSeparator.Location = new Point(capLabel.Left - S(18), _enabledToggle.Top);
+            _capNote.Location = new Point(rightEdge - _capNote.Width, _capPicker.Bottom + S(5));
             removeBtn.Location = new Point(rightEdge - removeBtn.Width, S(6));
-            header.Height = Math.Max(_enabledToggle.Bottom, _capPicker.Bottom) + S(16);
+            header.Height = Math.Max(_enabledToggle.Bottom, _capNote.Bottom) + S(14);
         };
 
         var displaysLabel = new Label { Dock = DockStyle.Top, Height = S(42), Text = "Displays", Font = Theme.Section, ForeColor = Theme.Text, BackColor = Theme.Bg };
@@ -677,27 +702,31 @@ public sealed class MainForm : Form
             ? NvidiaFrameLimiter.TrySetLimit(exe, profile.FrameCapHz, out string message)
             : NvidiaFrameLimiter.TryClearLimit(exe, out message);
 
-        if (ok && profile.FrameCapHz > 0 && NvidiaFrameLimiter.GetLimit(exe) is { } actual && actual != profile.FrameCapHz)
-            message = $"Asked the NVIDIA driver for {profile.FrameCapHz} FPS on {exe} but it reads back {actual}";
+        bool mismatch = ok && profile.FrameCapHz > 0
+            && NvidiaFrameLimiter.GetLimit(exe) is { } actual && actual != profile.FrameCapHz;
+        if (mismatch)
+            message = $"Asked the NVIDIA driver for {profile.FrameCapHz} FPS on {exe} but it reads back differently";
 
         Logger.Log($"Driver limit for {profile.Name}: {message}");
+        if (!ok || mismatch)
+            Logger.Log($"Driver profile after the write:{Environment.NewLine}{NvidiaFrameLimiter.DescribeProfile(exe)}");
         _statusLabel.Text = message;
     }
 
     /// <summary>What the cap does on this machine — the driver limit only exists on NVIDIA.</summary>
-    private static string CapTooltip()
-    {
-        const string displayPart = "Holds every display at this refresh rate while the game runs, and puts them back\n"
-            + "the moment it exits.";
-        return NvidiaFrameLimiter.IsAvailable
-            ? displayPart + "\n\nIt also sets the NVIDIA driver's per-game frame rate limit for this\n"
-                + "profile's .exe — the same \"Max Frame Rate\" the control panel writes — which caps the\n"
-                + "game whether or not V-Sync is on. That part applies from the game's next launch, and\n"
-                + "stays on the game's driver profile until the cap is set back to \"No cap\"."
-            : displayPart + "\n\nA game presenting in sync with the display can't draw more frames than the\n"
-                + "display refreshes, so this is the cap — turn V-Sync on in the game, or it will still\n"
-                + $"run free in exclusive fullscreen.\n\nDriver-level limiting is off: {NvidiaFrameLimiter.UnavailableReason}";
-    }
+    private static string CapTooltip() => NvidiaFrameLimiter.IsAvailable
+        ? "A hard frame rate limit, written to this game's NVIDIA driver profile as \"Max Frame\n"
+            + "Rate\" — the same setting the NVIDIA Control Panel writes. It holds the game whether\n"
+            + "or not V-Sync is on, and in exclusive fullscreen.\n\n"
+            + "The driver reads a game's profile when the game starts, so set this before launching.\n"
+            + "It stays on the profile until the cap goes back to \"No cap\".\n\n"
+            + "Every display is also held at this refresh rate while the game runs, as a second line\n"
+            + "of defence, and put back when it exits."
+        : "Hard frame rate limiting needs an NVIDIA GPU: "
+            + $"{NvidiaFrameLimiter.UnavailableReason}.\n\n"
+            + "What this can still do is hold every display at the chosen refresh rate while the game\n"
+            + "runs. That caps a game only while it presents in sync with the display — V-Sync on,\n"
+            + "and not in exclusive fullscreen.";
 
     /// <summary>
     /// Fills the header's cap picker with every rate any connected display offers. A cap

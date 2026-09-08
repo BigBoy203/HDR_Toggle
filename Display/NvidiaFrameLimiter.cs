@@ -42,6 +42,8 @@ public static class NvidiaFrameLimiter
     private const uint IdSetSetting = 0x577DD202;
     private const uint IdGetSetting = 0x73BF8338;
     private const uint IdDeleteProfileSetting = 0xE4A26362;
+    private const uint IdEnumSettings = 0xAE3039DA;
+    private const uint IdGetProfileInfo = 0x61CD6FD6;
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate IntPtr QueryInterfaceFn(uint id);
@@ -72,6 +74,9 @@ public static class NvidiaFrameLimiter
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate int DeleteSettingFn(IntPtr session, IntPtr profile, uint settingId);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate int EnumSettingsFn(IntPtr session, IntPtr profile, uint startIndex, ref uint settingCount, IntPtr settings);
 
     // ---- NVAPI struct sizes and field offsets ------------------------------------
     // Written into fixed-size byte buffers rather than modelled as structs: every one of
@@ -123,6 +128,8 @@ public static class NvidiaFrameLimiter
     private static ProfileBufferFn? _setSetting;
     private static GetSettingFn? _getSetting;
     private static DeleteSettingFn? _deleteSetting;
+    private static EnumSettingsFn? _enumSettings;      // diagnostics only
+    private static ProfileBufferFn? _getProfileInfo;   // diagnostics only
 
     /// <summary>True when this machine has a driver that can take a frame rate limit.</summary>
     public static bool IsAvailable
@@ -224,6 +231,70 @@ public static class NvidiaFrameLimiter
             return (true, "");
         });
         return result;
+    }
+
+    /// <summary>
+    /// Everything the driver holds for this executable: which profile claims it and every
+    /// setting on that profile, by id and value.
+    ///
+    /// This exists because the mapping from "Max Frame Rate" in the control panel to a
+    /// setting id is not documented anywhere trustworthy. Set the limit by hand in the
+    /// NVIDIA Control Panel, run this, and the setting that appeared is the one to write.
+    /// </summary>
+    public static string DescribeProfile(string exeName)
+    {
+        var report = new StringBuilder();
+        WithSession(out string failure, session =>
+        {
+            if (!TryGetProfile(session, exeName, create: false, out IntPtr profile, out string why))
+                return (false, why);
+
+            report.AppendLine($"Profile for {exeName}:");
+
+            if (_getProfileInfo is not null)
+            {
+                byte[] info = new byte[ProfileSize];
+                WriteUInt32(info, 0, Version(ProfileSize, 1));
+                if (Pinned(info, p => _getProfileInfo(session, profile, p)) == NvApiOk)
+                {
+                    report.AppendLine($"  name:      {ReadUnicode(info, ProfileNameOffset)}");
+                    report.AppendLine($"  settings:  {ReadUInt32(info, ProfileGpuSupportOffset + 12)}");
+                }
+            }
+
+            if (_enumSettings is null)
+            {
+                report.AppendLine("  (this driver won't enumerate settings)");
+                return (true, "");
+            }
+
+            int found = 0;
+            for (uint index = 0; index < 256; index++)
+            {
+                byte[] setting = new byte[SettingSize];
+                WriteUInt32(setting, 0, Version(SettingSize, 1));
+                uint count = 1;
+                if (Pinned(setting, p => _enumSettings(session, profile, index, ref count, p)) != NvApiOk || count == 0)
+                    break;
+
+                found++;
+                uint id = ReadUInt32(setting, SettingIdOffset);
+                uint current = ReadUInt32(setting, SettingCurrentValueOffset);
+                uint predefined = ReadUInt32(setting, SettingPredefinedValueOffset);
+                string name = ReadUnicode(setting, SettingNameOffset);
+                string type = ReadUInt32(setting, SettingTypeOffset) == 0 ? "dword" : "other";
+                report.AppendLine($"  0x{id:X8}  {type}  current 0x{current:X8} ({current})"
+                    + $"  default 0x{predefined:X8}{(name.Length > 0 ? "  " + name : "")}");
+            }
+
+            if (found == 0)
+                report.AppendLine("  (no settings on this profile)");
+            return (true, "");
+        });
+
+        if (report.Length == 0)
+            report.AppendLine(failure.Length > 0 ? failure : $"Nothing known about {exeName}");
+        return report.ToString().TrimEnd();
     }
 
     /// <summary>
@@ -371,6 +442,8 @@ public static class NvidiaFrameLimiter
             _setSetting = Resolve<ProfileBufferFn>(IdSetSetting);
             _getSetting = Resolve<GetSettingFn>(IdGetSetting);
             _deleteSetting = Resolve<DeleteSettingFn>(IdDeleteProfileSetting);
+            _enumSettings = Resolve<EnumSettingsFn>(IdEnumSettings);
+            _getProfileInfo = Resolve<ProfileBufferFn>(IdGetProfileInfo);
 
             if (_initialize is null || _createSession is null || _destroySession is null || _loadSettings is null
                 || _saveSettings is null || _createProfile is null || _createApplication is null
@@ -435,6 +508,15 @@ public static class NvidiaFrameLimiter
         BitConverter.TryWriteBytes(buffer.AsSpan(offset), value);
 
     private static uint ReadUInt32(byte[] buffer, int offset) => BitConverter.ToUInt32(buffer, offset);
+
+    /// <summary>Reads a NUL-terminated NvAPI_UnicodeString back out of a buffer.</summary>
+    private static string ReadUnicode(byte[] buffer, int offset)
+    {
+        int end = offset;
+        while (end + 1 < offset + UnicodeStringSize && (buffer[end] != 0 || buffer[end + 1] != 0))
+            end += 2;
+        return Encoding.Unicode.GetString(buffer, offset, end - offset);
+    }
 
     /// <summary>Writes a NUL-terminated NvAPI_UnicodeString; the buffer is already zeroed.</summary>
     private static void WriteUnicode(byte[] buffer, int offset, string value)

@@ -410,8 +410,10 @@ public sealed class RuleEngine
             if (NvidiaFrameLimiter.GetLimit(exe) == profile.FrameCapHz)
                 continue;
 
-            NvidiaFrameLimiter.TrySetLimit(exe, profile.FrameCapHz, out string message);
+            bool ok = NvidiaFrameLimiter.TrySetLimit(exe, profile.FrameCapHz, out string message);
             Logger.Log($"Driver limit for {profile.Name}: {message}");
+            if (!ok || NvidiaFrameLimiter.GetLimit(exe) != profile.FrameCapHz)
+                Logger.Log($"Driver profile after the write:{Environment.NewLine}{NvidiaFrameLimiter.DescribeProfile(exe)}");
         }
     }
 
