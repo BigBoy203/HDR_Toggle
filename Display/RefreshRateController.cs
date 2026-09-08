@@ -125,6 +125,20 @@ public static class RefreshRateController
     }
 
     /// <summary>
+    /// The rate to use for a cap of <paramref name="cap"/> Hz out of the rates a display
+    /// offers: the highest at or below the cap, or — when everything it can do is above —
+    /// the lowest it has, which is as close to the cap as that display can get. 0 when
+    /// there is nothing to choose from.
+    /// </summary>
+    public static int ChooseRate(IReadOnlyList<int> rates, int cap)
+    {
+        if (rates.Count == 0 || cap <= 0)
+            return 0;
+        int atOrBelow = rates.Where(r => r <= cap).DefaultIfEmpty(0).Max();
+        return atOrBelow > 0 ? atOrBelow : rates.Min();
+    }
+
+    /// <summary>
     /// Switches the display to <paramref name="hz"/>, keeping resolution and colour
     /// depth as they are. Returns true if the display is already there or got there.
     /// </summary>

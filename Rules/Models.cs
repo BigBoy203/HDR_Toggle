@@ -37,12 +37,23 @@ public class GameProfile
     public Dictionary<string, OverlayAction> OverlayRules { get; set; } = new();
 
     /// <summary>
-    /// Refresh rate (Hz) to hold a display at while the game runs, keyed by monitor
-    /// device path. A missing entry means "leave it alone". This is the frame rate cap:
-    /// the display can't present faster than it refreshes, so a game running with V-Sync
-    /// is pinned to this number. Always restored to the pre-launch rate on exit.
+    /// Refresh rate (Hz) to hold <em>every</em> display at while the game runs; 0 means no
+    /// cap. This is the frame rate cap: a display can't present faster than it refreshes,
+    /// so a game running with V-Sync is pinned to this number. It is one setting for the
+    /// whole profile rather than one per display — a game runs on one monitor, and which
+    /// one is not worth making the user work out. Displays that can't do exactly this rate
+    /// take the closest they support at or below it. Always restored on exit.
     /// </summary>
-    public Dictionary<string, int> RefreshRateRules { get; set; } = new();
+    public int FrameCapHz { get; set; }
+
+    /// <summary>
+    /// The per-display cap this setting replaced. Deserialized only, so an existing
+    /// config keeps working; <see cref="ConfigStore.Load"/> folds it into
+    /// <see cref="FrameCapHz"/> and clears it.
+    /// </summary>
+    [JsonPropertyName("RefreshRateRules")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] // so it leaves no dead key behind
+    public Dictionary<string, int>? LegacyRefreshRateRules { get; set; }
 
     [JsonIgnore]
     public string ProcessName => Path.GetFileNameWithoutExtension(ExePath);

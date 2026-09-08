@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Reflection;
 using HdrToggle.Display;
 using HdrToggle.Monitoring;
 using HdrToggle.Rules;
@@ -19,6 +20,9 @@ public sealed class MainForm : Form
     private static readonly string[] ExitOptions = { ExitRestore, ExitNoChange, ExitOn, ExitOff };
 
     private const string CapNone = "No cap";
+
+    /// <summary>Fallback cap choices for when no display will say what it supports.</summary>
+    private static readonly int[] CommonRates = { 30, 50, 60, 75, 90, 100, 120, 144, 165, 240 };
 
     private const string OverlayNone = "Do nothing";
     private const string OverlayBlackout = "Black out screen";
@@ -42,6 +46,7 @@ public sealed class MainForm : Form
     private readonly ToggleSwitch _autostartToggle;
     private readonly ToggleSwitch _overlayToggle;
     private readonly Label _overlayLabel;
+    private readonly OptionPicker _capPicker;
     private readonly HotkeyBox _hotkeyBox;
     private readonly ToolTip _tips = new();
     private readonly Dictionary<string, Image> _iconCache = new(StringComparer.OrdinalIgnoreCase);
@@ -56,6 +61,11 @@ public sealed class MainForm : Form
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public bool HideOnClose { get; set; } = true;
 
+    /// <summary>App version for the corner of the status bar, without any build metadata.</summary>
+    private static string AppVersion =>
+        (Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+         ?? Application.ProductVersion).Split('+')[0];
+
     /// <summary>Scales a 96-dpi design value to the window's DPI.</summary>
     private int S(int v) => (int)Math.Round(v * DeviceDpi / 96.0);
 
@@ -69,24 +79,53 @@ public sealed class MainForm : Form
         Text = "HDR Toggle";
         StartPosition = FormStartPosition.CenterScreen;
         AutoScaleMode = AutoScaleMode.None; // all layout goes through S()
-        Size = new Size(S(1080), S(700));
-        MinimumSize = new Size(S(940), S(620));
+        Size = new Size(S(1140), S(760));
+        MinimumSize = new Size(S(1000), S(660));
         BackColor = Theme.Bg;
         ForeColor = Theme.Text;
         Font = Theme.Base;
         try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
 
         // ===== bottom bar =====
-        var bottomBar = new Panel { Dock = DockStyle.Bottom, Height = S(56), BackColor = Theme.Sidebar };
+        var bottomBar = new Panel { Dock = DockStyle.Bottom, Height = S(60), BackColor = Theme.Sidebar };
         _statusLabel = new Label
         {
             AutoSize = true,
             ForeColor = Theme.TextDim,
             BackColor = Theme.Sidebar,
-            Location = new Point(S(20), S(19)),
+            Margin = new Padding(S(12), S(21), 0, 0),
             Text = "Ready",
         };
-        bottomBar.Controls.Add(_statusLabel);
+        var versionLabel = new Label
+        {
+            AutoSize = true,
+            ForeColor = Theme.TextDim,
+            BackColor = Theme.Sidebar,
+            Font = Theme.Small,
+            Margin = new Padding(0, S(22), 0, 0),
+            Text = $"v{AppVersion}",
+        };
+        _tips.SetToolTip(versionLabel, $"HDR Toggle {AppVersion}\nSettings and log: {ConfigStore.ConfigDir}");
+        var statusDivider = new Panel
+        {
+            Size = new Size(1, S(14)),
+            BackColor = Theme.Border,
+            Margin = new Padding(S(12), S(22), 0, 0),
+        };
+        var bottomLeft = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Left,
+            FlowDirection = FlowDirection.LeftToRight,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            BackColor = Theme.Sidebar,
+            WrapContents = false,
+            Padding = new Padding(S(20), 0, 0, 0),
+        };
+        bottomLeft.Controls.Add(versionLabel);
+        bottomLeft.Controls.Add(statusDivider);
+        bottomLeft.Controls.Add(_statusLabel);
+        bottomBar.Controls.Add(bottomLeft);
 
         var bottomRight = new FlowLayoutPanel
         {
@@ -104,7 +143,7 @@ public sealed class MainForm : Form
             AutoSize = true,
             Font = Theme.Small,
             Padding = new Padding(S(8), S(4), S(8), S(4)),
-            Margin = new Padding(S(6), S(12), S(6), S(12)),
+            Margin = new Padding(S(6), S(14), S(6), S(14)),
         };
         ControlStyling.StyleButton(refreshBtn, Theme.Field, Theme.Text);
         refreshBtn.Click += (_, _) => LoadSelectedProfile();
@@ -114,13 +153,13 @@ public sealed class MainForm : Form
             AutoSize = true,
             ForeColor = Theme.TextDim,
             BackColor = Theme.Sidebar,
-            Margin = new Padding(S(10), S(19), S(8), 0),
+            Margin = new Padding(S(10), S(21), S(8), 0),
         };
         _autostartToggle = new ToggleSwitch
         {
             Checked = _config.StartWithWindows,
             Size = new Size(S(44), S(22)),
-            Margin = new Padding(0, S(17), S(6), 0),
+            Margin = new Padding(0, S(19), S(6), 0),
         };
         _autostartToggle.CheckedChanged += (_, _) =>
         {
@@ -143,13 +182,13 @@ public sealed class MainForm : Form
             AutoSize = true,
             ForeColor = Theme.TextDim,
             BackColor = Theme.Sidebar,
-            Margin = new Padding(S(14), S(19), S(8), 0),
+            Margin = new Padding(S(14), S(21), S(8), 0),
         };
         _hotkeyBox = new HotkeyBox
         {
             Value = _config.PeekHotkey,
             Size = new Size(S(112), S(26)),
-            Margin = new Padding(0, S(15), S(6), 0),
+            Margin = new Padding(0, S(17), S(6), 0),
         };
         _tips.SetToolTip(_hotkeyBox, "Click, then press the combo that lifts and restores the overlays.\n"
             + "Esc cancels, Backspace clears. A modifier (Ctrl/Alt/Shift) is required.");
@@ -174,9 +213,9 @@ public sealed class MainForm : Form
         var sidebar = new Panel
         {
             Dock = DockStyle.Left,
-            Width = S(300),
+            Width = S(324),
             BackColor = Theme.Sidebar,
-            Padding = new Padding(S(16), S(16), S(16), S(12)),
+            Padding = new Padding(S(18), S(18), S(18), S(14)),
         };
 
         _gameList = new VerticalCardList
@@ -186,12 +225,12 @@ public sealed class MainForm : Form
         };
         _gameList.ClientSizeChanged += (_, _) => ResizeCards(_gameList);
 
-        var addBtn = new Button { Dock = DockStyle.Top, Height = S(38), Text = "+  Add game", Font = Theme.Header };
-        ControlStyling.StyleButton(addBtn, Theme.Accent, Color.FromArgb(30, 22, 8));
+        var addBtn = new Button { Dock = DockStyle.Top, Height = S(42), Text = "+  Add game", Font = Theme.Header };
+        ControlStyling.StyleButton(addBtn, Theme.Accent, Color.FromArgb(30, 22, 8), Theme.AccentHover);
         addBtn.Click += (_, _) => AddProfile();
 
-        var addBtnSpacer = new Panel { Dock = DockStyle.Top, Height = S(14), BackColor = Theme.Sidebar };
-        var gamesLabel = new Label { Dock = DockStyle.Top, Height = S(34), Text = "Games", Font = Theme.Section, ForeColor = Theme.Text, BackColor = Theme.Sidebar };
+        var addBtnSpacer = new Panel { Dock = DockStyle.Top, Height = S(16), BackColor = Theme.Sidebar };
+        var gamesLabel = new Label { Dock = DockStyle.Top, Height = S(38), Text = "Games", Font = Theme.Section, ForeColor = Theme.Text, BackColor = Theme.Sidebar };
 
         sidebar.Controls.Add(_gameList);
         sidebar.Controls.Add(addBtnSpacer);
@@ -199,7 +238,7 @@ public sealed class MainForm : Form
         sidebar.Controls.Add(gamesLabel);
 
         // ===== main content =====
-        _content = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Bg, Padding = new Padding(S(24), S(20), S(24), S(12)) };
+        _content = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Bg, Padding = new Padding(S(28), S(22), S(28), S(16)) };
 
         var header = new Panel { Dock = DockStyle.Top, Height = S(118), BackColor = Theme.Bg };
 
@@ -262,6 +301,30 @@ public sealed class MainForm : Form
             _engine.OverlaysEnabled = _overlayToggle.Checked;
         };
 
+        // Frame rate cap. One setting for the profile rather than one per display: the game
+        // runs on one monitor and the point is to be under the ceiling, so it applies to all
+        // of them. Options are filled in from the connected displays by PopulateDisplayCards.
+        var capSeparator = new Panel { Size = new Size(1, S(22)), BackColor = Theme.Border, Anchor = AnchorStyles.Top | AnchorStyles.Right };
+        var capLabel = new Label
+        {
+            Text = "FPS cap",
+            AutoSize = true,
+            ForeColor = Theme.TextDim,
+            BackColor = Theme.Bg,
+            Anchor = AnchorStyles.Top | AnchorStyles.Right,
+        };
+        _capPicker = new OptionPicker { Size = new Size(S(120), S(26)), Anchor = AnchorStyles.Top | AnchorStyles.Right };
+        _capPicker.ValueChanged += (_, _) =>
+        {
+            if (_loading || _selected is not { } p) return;
+            p.FrameCapHz = TextToRate(_capPicker.Value);
+            _save();
+        };
+        _tips.SetToolTip(_capPicker, "Holds every display at this refresh rate while the game runs, and puts them back\n"
+            + "the moment it exits. A game presenting in sync with the display can't draw more\n"
+            + "frames than the display refreshes, so this is the cap — turn V-Sync on in the game,\n"
+            + "or it will still run free in exclusive fullscreen.");
+
         var removeBtn = new Button
         {
             Text = "Remove",
@@ -281,6 +344,9 @@ public sealed class MainForm : Form
         header.Controls.Add(overlaySeparator);
         header.Controls.Add(_overlayToggle);
         header.Controls.Add(_overlayLabel);
+        header.Controls.Add(capSeparator);
+        header.Controls.Add(capLabel);
+        header.Controls.Add(_capPicker);
         header.Controls.Add(removeBtn);
         header.Resize += (_, _) =>
         {
@@ -293,11 +359,16 @@ public sealed class MainForm : Form
             overlaySeparator.Location = new Point(enabledLabel.Right + S(18), _enabledToggle.Top);
             _overlayToggle.Location = new Point(overlaySeparator.Right + S(18), _enabledToggle.Top);
             _overlayLabel.Location = new Point(_overlayToggle.Right + S(8), _enabledToggle.Top + S(1));
+            // Pinned to the right edge under the Remove button rather than flowing after the
+            // overlay switch, so a narrow window can't push it off the card.
+            _capPicker.Location = new Point(rightEdge - _capPicker.Width, _enabledToggle.Top - S(2));
+            capLabel.Location = new Point(_capPicker.Left - capLabel.Width - S(8), _enabledToggle.Top + S(1));
+            capSeparator.Location = new Point(capLabel.Left - S(18), _enabledToggle.Top);
             removeBtn.Location = new Point(rightEdge - removeBtn.Width, S(6));
-            header.Height = _enabledToggle.Bottom + S(16);
+            header.Height = Math.Max(_enabledToggle.Bottom, _capPicker.Bottom) + S(16);
         };
 
-        var displaysLabel = new Label { Dock = DockStyle.Top, Height = S(36), Text = "Displays", Font = Theme.Section, ForeColor = Theme.Text, BackColor = Theme.Bg };
+        var displaysLabel = new Label { Dock = DockStyle.Top, Height = S(42), Text = "Displays", Font = Theme.Section, ForeColor = Theme.Text, BackColor = Theme.Bg };
 
         _displayList = new VerticalCardList
         {
@@ -440,8 +511,8 @@ public sealed class MainForm : Form
             {
                 Profile = p,
                 GameIcon = GetGameIcon(p),
-                Height = S(64),
-                Margin = new Padding(0, 0, 0, S(8)),
+                Height = S(78),
+                Margin = new Padding(0, 0, 0, S(12)),
             };
             card.Click += (_, _) => SelectProfile(card.Profile);
             _tips.SetToolTip(card, p.ExePath);
@@ -541,20 +612,21 @@ public sealed class MainForm : Form
             error = $"Could not enumerate displays: {ex.Message}";
         }
 
+        var rates = new SortedSet<int>();
         foreach (var d in displays)
         {
-            var rates = SafeGetRates(d);
+            rates.UnionWith(SafeGetRates(d));
             _displayList.Controls.Add(BuildDisplayCard(profile, d.DevicePath, d.FriendlyName, d.SupportsHdr,
-                connected: true, d.RefreshHz, rates));
+                connected: true, d.RefreshHz));
         }
+        PopulateCapPicker(profile, rates);
 
         var connected = displays.Select(d => d.DevicePath).ToHashSet();
         var orphaned = profile.LaunchRules.Keys.Concat(profile.ExitRules.Keys).Concat(profile.OverlayRules.Keys)
-            .Concat(profile.RefreshRateRules.Keys)
             .Where(path => !connected.Contains(path)).Distinct().ToList();
         foreach (var path in orphaned)
             _displayList.Controls.Add(BuildDisplayCard(profile, path, "Disconnected display", supportsHdr: true,
-                connected: false, refreshHz: 0, rates: Array.Empty<int>()));
+                connected: false, refreshHz: 0));
 
         ResizeCards(_displayList);
         _displayList.ResumeLayout();
@@ -565,7 +637,35 @@ public sealed class MainForm : Form
             _statusLabel.Text = error;
     }
 
-    /// <summary>Refresh rates a display offers; an enumeration failure just means no cap row.</summary>
+    /// <summary>
+    /// Fills the header's cap picker with every rate any connected display offers. A cap
+    /// the displays no longer offer is kept in the list, so a saved setting is always
+    /// visible and can be changed rather than silently disappearing.
+    /// </summary>
+    private void PopulateCapPicker(GameProfile profile, IReadOnlyCollection<int> rates)
+    {
+        // With no display to ask (enumeration failed, or none reported a mode list), offer
+        // the usual suspects rather than a picker that can only say "No cap". Whatever is
+        // chosen is matched to a rate the display really supports when it is applied.
+        if (rates.Count == 0)
+            rates = CommonRates;
+
+        var options = new List<string> { CapNone };
+        options.AddRange(rates.Select(RateToText));
+        int cap = profile.FrameCapHz;
+        string value = cap == 0 ? CapNone : RateToText(cap);
+        if (cap != 0 && !options.Contains(value))
+            options.Add(value);
+
+        bool wasLoading = _loading;
+        _loading = true;
+        _capPicker.Options.Clear();
+        _capPicker.Options.AddRange(options);
+        _capPicker.Value = value;
+        _loading = wasLoading;
+    }
+
+    /// <summary>Refresh rates a display offers; an enumeration failure just means fewer cap choices.</summary>
     private static IReadOnlyList<int> SafeGetRates(DisplayInfo display)
     {
         try
@@ -580,9 +680,9 @@ public sealed class MainForm : Form
     }
 
     private CardPanel BuildDisplayCard(GameProfile profile, string path, string name, bool supportsHdr, bool connected,
-        int refreshHz, IReadOnlyList<int> rates)
+        int refreshHz)
     {
-        var card = new CardPanel { Height = S(92), Margin = new Padding(0, 0, 0, S(10)) };
+        var card = new CardPanel { Height = S(96), Margin = new Padding(0, 0, 0, S(14)) };
 
         var nameLabel = new Label
         {
@@ -614,14 +714,12 @@ public sealed class MainForm : Form
         // Each rule row: dim label on the left of an OptionPicker, anchored to the card's right edge.
         var rows = new List<(Label Label, OptionPicker Picker)>();
 
-        void AddRow(string labelText, IEnumerable<string> options, string value, Action<string> onChanged, string? tip = null)
+        void AddRow(string labelText, string[] options, string value, Action<string> onChanged)
         {
             var picker = new OptionPicker { Size = new Size(S(190), S(28)) };
             picker.Options.AddRange(options);
             picker.Value = value;
             picker.ValueChanged += (_, _) => onChanged(picker.Value);
-            if (tip is not null)
-                _tips.SetToolTip(picker, tip);
             var label = new Label
             {
                 Text = labelText,
@@ -657,34 +755,6 @@ public sealed class MainForm : Form
             });
         }
 
-        // The cap works on every display, HDR or not. It is only worth offering when the
-        // display has more than one rate to choose between — or when a saved rule is
-        // already there to be seen and changed.
-        int cappedHz = profile.RefreshRateRules.GetValueOrDefault(path);
-        if (rates.Count > 1 || cappedHz != 0)
-        {
-            var capOptions = new List<string> { CapNone };
-            capOptions.AddRange(rates.Select(RateToText));
-            // A saved rule the display no longer offers (resolution changed, monitor
-            // swapped) still belongs in the list, or picking it up would silently drop it.
-            if (cappedHz != 0 && !rates.Contains(cappedHz))
-                capOptions.Add(RateToText(cappedHz));
-
-            AddRow("Frame rate cap", capOptions, cappedHz == 0 ? CapNone : RateToText(cappedHz), v =>
-            {
-                int hz = TextToRate(v);
-                if (hz == 0)
-                    profile.RefreshRateRules.Remove(path);
-                else
-                    profile.RefreshRateRules[path] = hz;
-                _save();
-            },
-            "Holds this display at the chosen refresh rate while the game runs, and puts it back\n"
-            + "the moment the game exits. A game presenting in sync with the display can't draw\n"
-            + "more frames than the display refreshes, so this is the cap — turn V-Sync on in the\n"
-            + "game, or it will still run free in exclusive fullscreen.");
-        }
-
         // Overlays work on every display, HDR or not.
         AddRow("While playing", OverlayOptions, OverlayToText(profile.OverlayRules.GetValueOrDefault(path)), v =>
         {
@@ -696,14 +766,14 @@ public sealed class MainForm : Form
             _save();
         });
 
-        card.Height = Math.Max(S(80), S(20 + rows.Count * 36));
+        card.Height = Math.Max(S(88), S(24 + rows.Count * 38));
 
         void Position()
         {
             int w = card.ClientSize.Width;
             for (int i = 0; i < rows.Count; i++)
             {
-                int y = S(14 + i * 36);
+                int y = S(16 + i * 38);
                 rows[i].Picker.Location = new Point(w - rows[i].Picker.Width - S(18), y);
                 rows[i].Label.Location = new Point(rows[i].Picker.Left - rows[i].Label.Width - S(10), y + S(5));
             }

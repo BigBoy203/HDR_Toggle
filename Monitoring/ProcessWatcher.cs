@@ -17,6 +17,12 @@ public sealed class ProcessWatcher : IDisposable
     public event Action<GameProfile>? GameStarted;
     public event Action<GameProfile>? GameStopped;
 
+    /// <summary>
+    /// Raised at the end of every poll that ran (so, not while paused). Lets the rule
+    /// engine re-check things that a running game can change behind its back.
+    /// </summary>
+    public event Action? Polled;
+
     public ProcessWatcher(Func<IReadOnlyList<GameProfile>> profilesProvider, Func<bool> isPaused)
     {
         _profilesProvider = profilesProvider;
@@ -69,6 +75,7 @@ public sealed class ProcessWatcher : IDisposable
 
         foreach (var p in started) GameStarted?.Invoke(p);
         foreach (var p in stopped) GameStopped?.Invoke(p);
+        Polled?.Invoke();
     }
 
     public void Dispose() => _timer.Dispose();

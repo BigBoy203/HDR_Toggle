@@ -6,20 +6,27 @@ namespace HdrToggle.UI;
 /// <summary>Dark card/tile theme shared by the custom controls.</summary>
 internal static class Theme
 {
-    public static readonly Color Bg = ColorTranslator.FromHtml("#14161D");
-    public static readonly Color Sidebar = ColorTranslator.FromHtml("#181B24");
-    public static readonly Color Card = ColorTranslator.FromHtml("#1F2430");
-    public static readonly Color CardHover = ColorTranslator.FromHtml("#252B3A");
-    public static readonly Color CardSelected = ColorTranslator.FromHtml("#2A3145");
-    public static readonly Color Field = ColorTranslator.FromHtml("#262C3B");
-    public static readonly Color Border = ColorTranslator.FromHtml("#2C3342");
+    // Black and orange, taken from app.ico: its body is #181A26 and its mark runs
+    // #FFA028 → #FFBE47. The greys are kept off the blue side of neutral so the orange
+    // stays the only colour with any temperature to it.
+    public static readonly Color Bg = ColorTranslator.FromHtml("#0E1015");
+    public static readonly Color Sidebar = ColorTranslator.FromHtml("#131620");
+    public static readonly Color Card = ColorTranslator.FromHtml("#181A26");
+    public static readonly Color CardHover = ColorTranslator.FromHtml("#212431");
+    public static readonly Color CardSelected = ColorTranslator.FromHtml("#2B2418"); // warm, under the accent border
+    public static readonly Color Field = ColorTranslator.FromHtml("#1D202B");
+    public static readonly Color Border = ColorTranslator.FromHtml("#2A2D39");
     public static readonly Color Accent = ColorTranslator.FromHtml("#FFA028");
-    public static readonly Color AccentSoft = ColorTranslator.FromHtml("#5A4520");
-    public static readonly Color Text = ColorTranslator.FromHtml("#ECEEF4");
-    public static readonly Color TextDim = ColorTranslator.FromHtml("#98A0B0");
+    public static readonly Color AccentHover = ColorTranslator.FromHtml("#FFB23E");
+    public static readonly Color AccentSoft = ColorTranslator.FromHtml("#4A3517");
+    public static readonly Color Text = ColorTranslator.FromHtml("#F1EFEA");
+    public static readonly Color TextDim = ColorTranslator.FromHtml("#9A99A2");
     public static readonly Color Danger = ColorTranslator.FromHtml("#E5484D");
     public static readonly Color Good = ColorTranslator.FromHtml("#46C878");
-    public static readonly Color TrackOff = ColorTranslator.FromHtml("#3A4152");
+    public static readonly Color TrackOff = ColorTranslator.FromHtml("#32353F");
+
+    /// <summary>Tray dot for "watching". Left blue on purpose: the four status dots have to
+    /// stay apart from each other, and amber is already the peek dot.</summary>
     public static readonly Color Idle = ColorTranslator.FromHtml("#5A8DEE");
 
     public static readonly Font Base = new("Segoe UI", 9.75f);

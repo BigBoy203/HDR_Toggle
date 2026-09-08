@@ -30,6 +30,23 @@ public sealed class RuleEngine
     private readonly HashSet<string> _active = new(StringComparer.OrdinalIgnoreCase);
     private readonly OverlayManager _overlays = new();
 
+    /// <summary>
+    /// How many times the cap has been re-applied for the games currently running. A game
+    /// that sets its own display mode on the way into exclusive fullscreen would otherwise
+    /// have us switching modes at each other forever, so the correcting stops after
+    /// <see cref="MaxCapCorrections"/> and says so in the log.
+    /// </summary>
+    private int _capCorrections;
+
+    private const int MaxCapCorrections = 5;
+
+    /// <summary>
+    /// The rate each display should be sitting at for the active cap, keyed by device path.
+    /// Worked out once when the cap is applied so the poll that holds it only has to read
+    /// the current rates, not re-enumerate every mode the displays support.
+    /// </summary>
+    private readonly Dictionary<string, int> _capTargets = new();
+
     /// <summary>Transient one-off message for the status bar.</summary>
     public event Action<string>? StatusChanged;
 
@@ -185,8 +202,8 @@ public sealed class RuleEngine
             Apply(path, action == LaunchAction.TurnOn);
         }
 
-        foreach (var (path, hz) in profile.RefreshRateRules)
-            ApplyRate(path, hz);
+        _capCorrections = 0;
+        ApplyFrameCap(ActiveFrameCap());
 
         foreach (var (path, action) in profile.OverlayRules)
             _overlays.Apply(path, action);
@@ -276,12 +293,114 @@ public sealed class RuleEngine
     }
 
     /// <summary>
+    /// Holds every display at <paramref name="hz"/>. A display that can't do exactly that
+    /// takes the closest rate it supports at or below it, so a mixed-refresh setup still
+    /// ends up under the cap rather than ignoring it.
+    /// </summary>
+    private void ApplyFrameCap(int hz)
+    {
+        _capTargets.Clear();
+        if (hz <= 0)
+            return;
+
+        foreach (var display in DisplaysForCap())
+        {
+            int target = TargetRate(display, hz);
+            if (target <= 0)
+                continue;
+            _capTargets[display.DevicePath] = target;
+            if (target != display.RefreshHz)
+                ApplyRate(display.DevicePath, target, display);
+        }
+    }
+
+    /// <summary>
+    /// Re-applies the cap if a display has climbed back above it — which is what happens
+    /// when a game sets its own mode on the way into exclusive fullscreen. Called on every
+    /// watcher poll while a game is running. A display someone dropped <em>below</em> the
+    /// cap is left alone: that is still under the ceiling, and it may well be deliberate.
+    /// </summary>
+    public void HoldFrameCap()
+    {
+        if (_capTargets.Count == 0 || _active.Count == 0 || _capCorrections >= MaxCapCorrections)
+            return;
+
+        foreach (var display in DisplaysForCap())
+        {
+            if (!_capTargets.TryGetValue(display.DevicePath, out int target) || display.RefreshHz <= target)
+                continue;
+
+            _capCorrections++;
+            Logger.Log($"{display.FriendlyName} came back at {display.RefreshHz} Hz; re-applying the {target} Hz cap "
+                + $"({_capCorrections}/{MaxCapCorrections}).");
+            ApplyRate(display.DevicePath, target, display);
+
+            if (_capCorrections == 1)
+                StatusChanged?.Invoke($"Re-applied the {target} Hz cap — the game had changed the display mode");
+
+            if (_capCorrections >= MaxCapCorrections)
+            {
+                Logger.Log("The game keeps setting its own display mode; leaving it alone now. "
+                    + "Turn V-Sync on in the game, or pick its in-game refresh rate, for the cap to hold.");
+                return;
+            }
+        }
+    }
+
+    /// <summary>The lowest cap asked for by the profiles currently running; 0 when none caps.</summary>
+    private int ActiveFrameCap()
+    {
+        int cap = 0;
+        foreach (var profile in _config.Profiles)
+        {
+            if (!_active.Contains(profile.ProcessName) || profile.FrameCapHz <= 0)
+                continue;
+            if (cap == 0 || profile.FrameCapHz < cap)
+                cap = profile.FrameCapHz;
+        }
+        return cap;
+    }
+
+    private static List<DisplayInfo> DisplaysForCap()
+    {
+        try
+        {
+            return HdrController.GetDisplays();
+        }
+        catch (Exception ex)
+        {
+            Logger.Log($"Failed to enumerate displays for the frame cap: {ex.Message}");
+            return new();
+        }
+    }
+
+    /// <summary>
+    /// The rate to put a display on for a cap of <paramref name="hz"/>: the highest it
+    /// supports at or below the cap, or its lowest if everything it offers is above.
+    /// </summary>
+    private static int TargetRate(DisplayInfo display, int hz)
+    {
+        List<int> rates;
+        try
+        {
+            rates = RefreshRateController.GetAvailableRates(display.GdiDeviceName);
+        }
+        catch (Exception ex)
+        {
+            Logger.Log($"Could not list refresh rates for {display.FriendlyName}: {ex.Message}");
+            return 0;
+        }
+        return RefreshRateController.ChooseRate(rates, hz);
+    }
+
+    /// <summary>
     /// Puts every display back on the refresh rate it had before the first game launched.
     /// A cap is never left behind: unlike HDR there is no "leave it as the game set it"
     /// option, because a monitor silently stuck at 60 Hz is a bug report, not a setting.
     /// </summary>
     private void RestoreRefreshRates()
     {
+        _capTargets.Clear();
         if (_config.RefreshRateSnapshot is null)
             return;
 

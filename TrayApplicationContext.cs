@@ -38,6 +38,8 @@ public sealed class TrayApplicationContext : ApplicationContext
         _watcher = new ProcessWatcher(() => _config.Profiles, () => _config.Paused);
         _watcher.GameStarted += _engine.OnGameStarted;
         _watcher.GameStopped += _engine.OnGameStopped;
+        // A game that sets its own display mode can undo the frame cap; this puts it back.
+        _watcher.Polled += _engine.HoldFrameCap;
 
         // Registered on the UI thread, so WM_HOTKEY lands here without marshalling.
         _hotkeys = new HotkeyManager();

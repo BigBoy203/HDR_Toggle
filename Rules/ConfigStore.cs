@@ -21,7 +21,11 @@ public static class ConfigStore
         try
         {
             if (File.Exists(ConfigPath))
-                return JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(ConfigPath), Options) ?? new AppConfig();
+            {
+                var config = JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(ConfigPath), Options) ?? new AppConfig();
+                MigrateFrameCap(config);
+                return config;
+            }
         }
         catch (Exception ex)
         {
@@ -31,6 +35,28 @@ public static class ConfigStore
             TryBackupBadConfig();
         }
         return new AppConfig();
+    }
+
+    /// <summary>
+    /// Folds a pre-existing per-display cap into the profile-wide one. The lowest rate
+    /// wins: it was the cap the user cared about, and applying it everywhere is what the
+    /// setting means now.
+    /// </summary>
+    private static void MigrateFrameCap(AppConfig config)
+    {
+        foreach (var profile in config.Profiles)
+        {
+            if (profile.LegacyRefreshRateRules is not { Count: > 0 } legacy)
+                continue;
+
+            var capped = legacy.Values.Where(hz => hz > 0).ToList();
+            if (profile.FrameCapHz == 0 && capped.Count > 0)
+            {
+                profile.FrameCapHz = capped.Min();
+                Logger.Log($"Migrated per-display frame cap for \"{profile.Name}\" to {profile.FrameCapHz} Hz on every display.");
+            }
+            profile.LegacyRefreshRateRules = null;
+        }
     }
 
     private static void TryBackupBadConfig()

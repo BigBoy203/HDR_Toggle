@@ -6,29 +6,39 @@ A small Windows tray app that automatically switches HDR on or off per display �
 
 1. **Add a game** — point the app at the game's `.exe`. It shows up as a tile with the game's icon.
 2. **Set rules per display** — each connected monitor gets a card; choose what happens when the game launches (*Turn HDR on / Turn HDR off / No change*) and when it exits (*Restore previous* — the default, *Turn HDR on / off*, or *No change*).
-3. **Cap the frame rate** — pick a refresh rate for a display and it is held there for as long as the game runs, then put straight back (see below).
+3. **Cap the frame rate** — one setting per game, in the profile header: every display is held at that refresh rate for as long as the game runs, then put straight back (see below).
 4. **While playing** (every display, HDR or not) — optionally *Black out screen* or *Dim screen* for the duration of the game. This is a pure overlay window (click-through, never steals focus, hidden from Alt+Tab) — no display settings are touched, and it disappears the moment the game closes.
 5. The app watches the process list from the system tray (polling every 2 seconds). When the game appears it snapshots the current HDR state and refresh rate of every display, applies your launch rules, and when the game closes it applies the exit rules (restoring the snapshot by default).
 
 ## Capping the frame rate
 
 Some engines tie physics, animation or input to the frame rate and come apart above the
-speed they were written for. The **Frame rate cap** row on a display card drops that
-display to the refresh rate you choose while the game runs, and restores the rate it was
-on the moment the game exits.
+speed they were written for — GTA IV's bikes above 60 fps are the classic case. The
+**FPS cap** picker in the profile header holds *every* display at the rate you choose for
+as long as the game runs, and restores what they were on the moment it exits.
 
+- It's one setting for the whole profile, not one per monitor: the game runs on one screen
+  and the point is to be under the ceiling, so it applies to all of them.
 - The cap is the refresh rate, so a game that presents in sync with the display can't draw
   more frames than the display refreshes. That covers V-Sync and, usually, a borderless
   window paced by the desktop compositor. **In exclusive fullscreen with V-Sync off the
   game still runs free** — turn V-Sync on for the cap to bite.
-- Only the rates the display already offers at its current resolution are listed. The cap
-  never changes resolution or colour depth, and a rate the panel rejects is refused
+- A display that can't do exactly the chosen rate takes the closest it supports at or
+  below it, so a mixed 144/60 Hz desk still ends up under the cap everywhere.
+- The cap never changes resolution or colour depth, and a rate the panel rejects is refused
   before it is applied rather than dropping you to a black screen.
-- Displays with a single available rate don't get the row — there is nothing to pick.
+- **It holds the cap.** A game that sets its own display mode on the way into exclusive
+  fullscreen would otherwise undo it, so any display that comes back above the cap is put
+  back — up to five times per session, after which it stops rather than fighting the game
+  over the display mode forever. Check `log.txt` if you're unsure which happened.
 - Unlike HDR there's no "leave it as the game set it" choice: the rate is always restored.
   If the app is killed mid-game, the leftover rate is restored on next start, same as HDR.
 - Variable-refresh (G-Sync/FreeSync) displays follow the same rule: the chosen rate is the
   ceiling.
+
+If a game ignores the desktop refresh rate entirely (it picks its own mode *and* runs with
+V-Sync off), no external app can cap it without hooking into the game — an in-game frame
+limiter or an overlay tool like RTSS is the remaining option.
 
 ## Peeking at your other monitors
 
@@ -79,7 +89,10 @@ HdrToggle --rate <index> 60   switch a display to a refresh rate (for testing)
 - HDR is switched via the Windows CCD API (`DisplayConfigSetDeviceInfo`): the Windows 11 24H2+ `SET_HDR_STATE` call, falling back to `SET_ADVANCED_COLOR_STATE` on older builds. No admin rights required.
 - The frame rate cap is a refresh-rate switch through the GDI mode API
   (`ChangeDisplaySettingsEx` with `dmDisplayFrequency`, resolution and colour depth left
-  alone). No overlay, no injection into the game, no admin rights.
+  alone), applied to every connected display and re-applied from the same 2-second poll
+  that watches for the game. No overlay, no injection into the game, no admin rights.
+- A per-display cap saved by an earlier version is folded into the profile-wide one on
+  first load — the lowest rate wins — so existing profiles keep capping.
 - Displays are identified by their stable monitor device path, so rules survive reboots and display re-ordering. Rules for a disconnected monitor show as "(Disconnected display)" and are skipped safely.
 - If the app was killed while a game was running, on next start it restores the leftover HDR and refresh-rate snapshot (unless the game is still running).
 - If two profiled games overlap, restore happens only after the last one exits, using the snapshot taken before the first launched.

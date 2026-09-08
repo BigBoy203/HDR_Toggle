@@ -137,24 +137,24 @@ internal class GameCard : Control
             g.DrawPath(pen, path);
         }
 
-        int pad = S(12);
-        int iconSize = S(32);
+        int pad = S(14);
+        int iconSize = S(38);
         int iconY = (Height - iconSize) / 2;
         if (GameIcon is not null)
             g.DrawImage(GameIcon, new Rectangle(pad, iconY, iconSize, iconSize));
 
         var nameColor = Profile.Enabled ? Theme.Text : Theme.TextDim;
-        int textX = pad + iconSize + S(12);
-        int textW = Width - textX - S(12);
+        int textX = pad + iconSize + S(14);
+        int textW = Width - textX - S(14);
 
         // Reserve room for the "Off" pill when disabled
         if (!Profile.Enabled)
         {
             string off = "Off";
             var offSize = TextRenderer.MeasureText(g, off, Theme.Small);
-            int pillW = offSize.Width + S(12);
-            int pillH = offSize.Height + S(4);
-            var pill = new RectangleF(Width - pillW - S(10), (Height - pillH) / 2f, pillW, pillH);
+            int pillW = offSize.Width + S(14);
+            int pillH = offSize.Height + S(6);
+            var pill = new RectangleF(Width - pillW - S(12), (Height - pillH) / 2f, pillW, pillH);
             using (var pillPath = Theme.RoundedRect(pill, pillH / 2f))
             using (var pillFill = new SolidBrush(Theme.TrackOff))
             {
@@ -162,14 +162,20 @@ internal class GameCard : Control
             }
             TextRenderer.DrawText(g, off, Theme.Small, Rectangle.Round(pill), Theme.Text,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
-            textW -= pillW + S(8);
+            textW -= pillW + S(10);
         }
 
-        var nameRect = new Rectangle(textX, S(11), textW, TextRenderer.MeasureText("X", Theme.Header).Height);
+        // Both lines as one block, centred against the icon, so the tile's height is free
+        // to change without the text drifting away from the middle of it.
+        int nameH = TextRenderer.MeasureText("X", Theme.Header).Height;
+        int subH = TextRenderer.MeasureText("X", Theme.Small).Height;
+        int textY = (Height - (nameH + S(3) + subH)) / 2;
+
+        var nameRect = new Rectangle(textX, textY, textW, nameH);
         TextRenderer.DrawText(g, Profile.Name, Theme.Header, nameRect, nameColor,
             TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
 
-        var subRect = new Rectangle(textX, nameRect.Bottom + S(1), textW, TextRenderer.MeasureText("X", Theme.Small).Height);
+        var subRect = new Rectangle(textX, nameRect.Bottom + S(3), textW, subH);
         TextRenderer.DrawText(g, Profile.ProcessName + ".exe", Theme.Small, subRect, Theme.TextDim,
             TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
     }
