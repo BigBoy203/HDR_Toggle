@@ -387,6 +387,34 @@ public sealed class RuleEngine
         return min == max ? $"{min} Hz" : $"{min}–{max} Hz";
     }
 
+    /// <summary>
+    /// Makes the NVIDIA driver's per-game frame rate limit match the caps in the config.
+    /// Run once at startup: the app is not the only thing that writes driver profiles — a
+    /// driver reinstall or a control-panel "restore defaults" wipes them — and a cap that
+    /// silently stopped being enforced is worse than one that was never set.
+    /// </summary>
+    public void SyncDriverLimits()
+    {
+        if (!NvidiaFrameLimiter.IsAvailable)
+        {
+            Logger.Log($"Driver frame rate limiting unavailable: {NvidiaFrameLimiter.UnavailableReason}");
+            return;
+        }
+
+        foreach (var profile in _config.Profiles)
+        {
+            if (profile.FrameCapHz <= 0 || string.IsNullOrEmpty(profile.ExePath))
+                continue;
+
+            string exe = Path.GetFileName(profile.ExePath);
+            if (NvidiaFrameLimiter.GetLimit(exe) == profile.FrameCapHz)
+                continue;
+
+            NvidiaFrameLimiter.TrySetLimit(exe, profile.FrameCapHz, out string message);
+            Logger.Log($"Driver limit for {profile.Name}: {message}");
+        }
+    }
+
     /// <summary>The lowest cap asked for by the profiles currently running; 0 when none caps.</summary>
     private int ActiveFrameCap()
     {

@@ -21,8 +21,8 @@ public sealed class MainForm : Form
 
     private const string CapNone = "No cap";
 
-    /// <summary>Fallback cap choices for when no display will say what it supports.</summary>
-    private static readonly int[] CommonRates = { 30, 50, 60, 75, 90, 100, 120, 144, 165, 240 };
+    /// <summary>The frame rates worth offering beyond whatever the displays happen to run at.</summary>
+    private static readonly int[] CommonRates = { 30, 45, 50, 60, 72, 75, 90, 100, 120, 144, 165, 240 };
 
     private const string OverlayNone = "Do nothing";
     private const string OverlayBlackout = "Black out screen";
@@ -319,11 +319,9 @@ public sealed class MainForm : Form
             if (_loading || _selected is not { } p) return;
             p.FrameCapHz = TextToRate(_capPicker.Value);
             _save();
+            ApplyDriverLimit(p);
         };
-        _tips.SetToolTip(_capPicker, "Holds every display at this refresh rate while the game runs, and puts them back\n"
-            + "the moment it exits. A game presenting in sync with the display can't draw more\n"
-            + "frames than the display refreshes, so this is the cap — turn V-Sync on in the game,\n"
-            + "or it will still run free in exclusive fullscreen.");
+        _tips.SetToolTip(_capPicker, CapTooltip());
 
         var removeBtn = new Button
         {
@@ -567,6 +565,12 @@ public sealed class MainForm : Form
         if (MessageBox.Show(this, $"Remove profile \"{p.Name}\"?", "HDR Toggle",
                 MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
             return;
+        if (p.FrameCapHz > 0 && NvidiaFrameLimiter.IsAvailable && !string.IsNullOrEmpty(p.ExePath))
+        {
+            NvidiaFrameLimiter.TryClearLimit(Path.GetFileName(p.ExePath), out string message);
+            Logger.Log($"Driver limit for {p.Name}: {message}");
+        }
+
         _config.Profiles.Remove(p);
         _selected = null;
         _save();
@@ -638,20 +642,59 @@ public sealed class MainForm : Form
     }
 
     /// <summary>
+    /// Pushes the profile's cap to the NVIDIA driver as a per-game frame rate limit, and
+    /// reads it straight back so the status line reports what the driver actually holds
+    /// rather than what we asked for.
+    /// </summary>
+    private void ApplyDriverLimit(GameProfile profile)
+    {
+        if (!NvidiaFrameLimiter.IsAvailable || string.IsNullOrEmpty(profile.ExePath))
+            return;
+
+        string exe = Path.GetFileName(profile.ExePath);
+        bool ok = profile.FrameCapHz > 0
+            ? NvidiaFrameLimiter.TrySetLimit(exe, profile.FrameCapHz, out string message)
+            : NvidiaFrameLimiter.TryClearLimit(exe, out message);
+
+        if (ok && profile.FrameCapHz > 0 && NvidiaFrameLimiter.GetLimit(exe) is { } actual && actual != profile.FrameCapHz)
+            message = $"Asked the NVIDIA driver for {profile.FrameCapHz} FPS on {exe} but it reads back {actual}";
+
+        Logger.Log($"Driver limit for {profile.Name}: {message}");
+        _statusLabel.Text = message;
+    }
+
+    /// <summary>What the cap does on this machine — the driver limit only exists on NVIDIA.</summary>
+    private static string CapTooltip()
+    {
+        const string displayPart = "Holds every display at this refresh rate while the game runs, and puts them back\n"
+            + "the moment it exits.";
+        return NvidiaFrameLimiter.IsAvailable
+            ? displayPart + "\n\nIt also sets the NVIDIA driver's per-game frame rate limit for this\n"
+                + "profile's .exe — the same \"Max Frame Rate\" the control panel writes — which caps the\n"
+                + "game whether or not V-Sync is on. That part applies from the game's next launch, and\n"
+                + "stays on the game's driver profile until the cap is set back to \"No cap\"."
+            : displayPart + "\n\nA game presenting in sync with the display can't draw more frames than the\n"
+                + "display refreshes, so this is the cap — turn V-Sync on in the game, or it will still\n"
+                + $"run free in exclusive fullscreen.\n\nDriver-level limiting is off: {NvidiaFrameLimiter.UnavailableReason}";
+    }
+
+    /// <summary>
     /// Fills the header's cap picker with every rate any connected display offers. A cap
     /// the displays no longer offer is kept in the list, so a saved setting is always
     /// visible and can be changed rather than silently disappearing.
     /// </summary>
     private void PopulateCapPicker(GameProfile profile, IReadOnlyCollection<int> rates)
     {
-        // With no display to ask (enumeration failed, or none reported a mode list), offer
-        // the usual suspects rather than a picker that can only say "No cap". Whatever is
-        // chosen is matched to a rate the display really supports when it is applied.
-        if (rates.Count == 0)
-            rates = CommonRates;
+        // The driver limit takes any frame rate, not just ones a panel can display, so the
+        // usual suspects are offered alongside the real refresh rates. A choice the display
+        // can't do exactly still caps it: the refresh side picks the closest rate at or
+        // below. With no display to ask at all, the standard list is all there is.
+        var choices = new SortedSet<int>(rates);
+        if (NvidiaFrameLimiter.IsAvailable || choices.Count == 0)
+            choices.UnionWith(CommonRates);
 
         var options = new List<string> { CapNone };
-        options.AddRange(rates.Select(RateToText));
+        options.AddRange(choices.Select(RateToText));
         int cap = profile.FrameCapHz;
         string value = cap == 0 ? CapNone : RateToText(cap);
         if (cap != 0 && !options.Contains(value))

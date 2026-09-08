@@ -34,6 +34,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         _config = ConfigStore.Load();
         _engine = new RuleEngine(_config, Save);
         _engine.RecoverOnStartup(IsProcessRunning);
+        _engine.SyncDriverLimits();
 
         _watcher = new ProcessWatcher(() => _config.Profiles, () => _config.Paused);
         _watcher.GameStarted += _engine.OnGameStarted;

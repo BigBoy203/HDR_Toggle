@@ -5,7 +5,7 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
-        if (args.Length > 0 && args[0] is "--list" or "--set" or "--rate")
+        if (args.Length > 0 && args[0] is "--list" or "--set" or "--rate" or "--fps")
         {
             Cli.Run(args);
             return;

@@ -6,7 +6,7 @@ A small Windows tray app that automatically switches HDR on or off per display �
 
 1. **Add a game** — point the app at the game's `.exe`. It shows up as a tile with the game's icon.
 2. **Set rules per display** — each connected monitor gets a card; choose what happens when the game launches (*Turn HDR on / Turn HDR off / No change*) and when it exits (*Restore previous* — the default, *Turn HDR on / off*, or *No change*).
-3. **Cap the frame rate** — one setting per game, in the profile header: every display is held at that refresh rate for as long as the game runs, then put straight back (see below).
+3. **Cap the frame rate** — one setting per game, in the profile header: on NVIDIA it sets the driver's per-game frame rate limit, and every display is held at that refresh rate for as long as the game runs (see below).
 4. **While playing** (every display, HDR or not) — optionally *Black out screen* or *Dim screen* for the duration of the game. This is a pure overlay window (click-through, never steals focus, hidden from Alt+Tab) — no display settings are touched, and it disappears the moment the game closes.
 5. The app watches the process list from the system tray (polling every 2 seconds). When the game appears it snapshots the current HDR state and refresh rate of every display, applies your launch rules, and when the game closes it applies the exit rules (restoring the snapshot by default).
 
@@ -19,10 +19,23 @@ as long as the game runs, and restores what they were on the moment it exits.
 
 - It's one setting for the whole profile, not one per monitor: the game runs on one screen
   and the point is to be under the ceiling, so it applies to all of them.
-- The cap is the refresh rate, so a game that presents in sync with the display can't draw
-  more frames than the display refreshes. That covers V-Sync and, usually, a borderless
-  window paced by the desktop compositor. **In exclusive fullscreen with V-Sync off the
-  game still runs free** — turn V-Sync on for the cap to bite.
+- **On NVIDIA it also sets a real frame rate limit.** The same value is written to the
+  game's driver profile as *Max Frame Rate* — the setting the NVIDIA Control Panel exposes
+  under Manage 3D settings → Program Settings. The driver paces the game's own frames, so
+  unlike the refresh-rate ceiling it caps the game **whether or not V-Sync is on, and in
+  exclusive fullscreen**. That is the part that fixes a game that ignores the display.
+  - The driver reads a game's profile when the game *starts*, so this is written the moment
+    you pick the cap, not when the game launches — set it, then start the game.
+  - It stays on the game's driver profile until you set the cap back to "No cap" or remove
+    the profile. You can see and clear it by hand in the NVIDIA Control Panel.
+  - It keys off the profile's .exe name, so point the profile at the game itself
+    (`GTAIV.exe`, `EFLC.exe`) rather than at a launcher.
+  - On AMD or Intel this part is skipped and the cap is the refresh rate alone; the picker's
+    tooltip says which you're getting.
+- The refresh-rate half of the cap only bites on a game that presents in sync with the
+  display: V-Sync on, or usually a borderless window paced by the desktop compositor. **In
+  exclusive fullscreen with V-Sync off it does nothing on its own** — that is what the
+  driver limit above is for.
 - A display that can't do exactly the chosen rate takes the closest it supports at or
   below it, so a mixed 144/60 Hz desk still ends up under the cap everywhere.
 - The cap never changes resolution or colour depth, and a rate the panel rejects is refused
@@ -42,8 +55,9 @@ as long as the game runs, and restores what they were on the moment it exits.
   ceiling.
 
 If a game ignores the desktop refresh rate entirely (it picks its own mode *and* runs with
-V-Sync off), no external app can cap it without hooking into the game — an in-game frame
-limiter or an overlay tool like RTSS is the remaining option.
+V-Sync off), the refresh-rate ceiling can't touch it — that is exactly the case the NVIDIA
+driver limit above is for. Without an NVIDIA GPU the remaining options are the game's own
+frame limiter, AMD's Radeon Chill / Frame Rate Target Control, or an overlay tool like RTSS.
 
 ## Peeking at your other monitors
 
@@ -87,6 +101,8 @@ The icon carries a status dot so you can tell what the app is doing at a glance:
 HdrToggle --list              list displays, their HDR state and refresh rates
 HdrToggle --set <index> on    turn HDR on/off for a display (for testing)
 HdrToggle --rate <index> 60   switch a display to a refresh rate (for testing)
+HdrToggle --fps GTAIV.exe 60  set the NVIDIA per-game frame rate limit ("off" clears it)
+HdrToggle --fps GTAIV.exe     read it back
 ```
 
 ## Notes
@@ -96,6 +112,15 @@ HdrToggle --rate <index> 60   switch a display to a refresh rate (for testing)
   (`ChangeDisplaySettingsEx` with `dmDisplayFrequency`, resolution and colour depth left
   alone), applied to every connected display and re-applied from the same 2-second poll
   that watches for the game. No overlay, no injection into the game, no admin rights.
+- The driver-level limit goes through NVAPI's driver settings (DRS) API: the game's own
+  profile is found by .exe name and its `Max Frame Rate` setting written, exactly as the
+  control panel does it. Every NVAPI struct carries its own size in a version field, so a
+  driver that doesn't recognise a call rejects it rather than misreading it; anything
+  missing (no NVIDIA driver, an entry point that moved) turns the feature off with a reason
+  shown in the picker's tooltip. Saving driver settings can require running as
+  administrator on some machines — the status line says so if the save is refused.
+- Driver limits are re-checked against the config once at startup, so a driver reinstall or
+  a control-panel "restore defaults" can't leave a cap silently unenforced.
 - A per-display cap saved by an earlier version is folded into the profile-wide one on
   first load — the lowest rate wins — so existing profiles keep capping.
 - Displays are identified by their stable monitor device path, so rules survive reboots and display re-ordering. Rules for a disconnected monitor show as "(Disconnected display)" and are skipped safely.

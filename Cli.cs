@@ -8,6 +8,7 @@ namespace HdrToggle;
 ///   HdrToggle --list                 list displays, HDR state and refresh rates
 ///   HdrToggle --set &lt;index&gt; on|off   toggle HDR on a display
 ///   HdrToggle --rate &lt;index&gt; &lt;hz&gt;    switch a display's refresh rate
+///   HdrToggle --fps &lt;exe&gt; [n|off]    read or set the NVIDIA per-game frame rate limit
 /// </summary>
 internal static class Cli
 {
@@ -24,6 +25,12 @@ internal static class Cli
 
         try
         {
+            if (args[0] == "--fps")
+            {
+                RunFps(args);
+                return;
+            }
+
             var displays = HdrController.GetDisplays();
 
             if (args[0] == "--list")
@@ -63,7 +70,8 @@ internal static class Cli
             else
             {
                 Console.WriteLine();
-                Console.WriteLine("Usage: HdrToggle --list | --set <index> on|off | --rate <index> <hz>");
+                Console.WriteLine("Usage: HdrToggle --list | --set <index> on|off | --rate <index> <hz>"
+                    + " | --fps <exe> [n|off]");
             }
         }
         catch (Exception ex)
@@ -71,5 +79,47 @@ internal static class Cli
             Console.WriteLine($"Error: {ex}");
         }
         Console.Out.Flush();
+    }
+
+    /// <summary>
+    /// Reads or writes the NVIDIA driver's per-game frame rate limit, so the thing that
+    /// actually caps a game that ignores V-Sync can be checked without the GUI.
+    /// </summary>
+    private static void RunFps(string[] args)
+    {
+        Console.WriteLine();
+        if (!NvidiaFrameLimiter.IsAvailable)
+        {
+            Console.WriteLine($"NVIDIA frame rate limiting unavailable: {NvidiaFrameLimiter.UnavailableReason}");
+            return;
+        }
+
+        if (args.Length < 2)
+        {
+            Console.WriteLine("Usage: HdrToggle --fps <exe> [n|off]      e.g. HdrToggle --fps GTAIV.exe 60");
+            return;
+        }
+
+        string exe = Path.GetFileName(args[1]);
+
+        if (args.Length >= 3)
+        {
+            bool off = args[2].Equals("off", StringComparison.OrdinalIgnoreCase) || args[2] == "0";
+            if (!off && !int.TryParse(args[2], out _))
+            {
+                Console.WriteLine($"'{args[2]}' is not a frame rate. Use a number, or 'off'.");
+                return;
+            }
+            int fps = off ? 0 : int.Parse(args[2]);
+            NvidiaFrameLimiter.TrySetLimit(exe, fps, out string message);
+            Console.WriteLine(message);
+        }
+
+        Console.WriteLine(NvidiaFrameLimiter.GetLimit(exe) switch
+        {
+            null => $"Could not read the driver limit for {exe}",
+            0 => $"{exe}: no driver frame rate limit",
+            int limit => $"{exe}: driver frame rate limit is {limit} FPS",
+        });
     }
 }
