@@ -7,7 +7,7 @@
   "targets": {
     ".NETCoreApp,Version=v10.0": {},
     ".NETCoreApp,Version=v10.0/win-x64": {
-      "HdrToggle/1.0.0": {
+      "HdrToggle/1.5.0": {
         "runtime": {
           "HdrToggle.dll": {}
         }
@@ -15,7 +15,7 @@
     }
   },
   "libraries": {
-    "HdrToggle/1.0.0": {
+    "HdrToggle/1.5.0": {
       "type": "project",
       "serviceable": false,
       "sha512": ""
