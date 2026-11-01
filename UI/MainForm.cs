@@ -457,9 +457,13 @@ public sealed class MainForm : Form
 
     private void PlaySelected()
     {
-        if (_selected is not { } profile)
-            return;
+        if (_selected is { } profile)
+            Play(profile);
+    }
 
+    /// <summary>Starts a game's Play target. Shared by the Play button and the tray flyout.</summary>
+    internal void Play(GameProfile profile)
+    {
         if (_engine.IsRunning(profile))
         {
             _statusLabel.Text = $"{profile.Name} is already running";
@@ -639,45 +643,14 @@ public sealed class MainForm : Form
 
     // ===== game icons =====
 
-    [System.Runtime.InteropServices.DllImport("shell32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
-    private static extern int SHDefExtractIcon(string pszIconFile, int iIndex, uint uFlags, out IntPtr phiconLarge, out IntPtr phiconSmall, uint nIconSize);
-
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern bool DestroyIcon(IntPtr hIcon);
-
-    private Image GetGameIcon(GameProfile p)
+    /// <summary>A profile's .exe icon, cached for the life of the window.</summary>
+    internal Image GetGameIcon(GameProfile p)
     {
-        if (_iconCache.TryGetValue(p.ExePath, out var cached))
-            return cached;
-
-        Image? img = null;
-        try
+        if (!_iconCache.TryGetValue(p.ExePath, out var img))
         {
-            // High-res extraction first (64px), fall back to the classic 32px API.
-            if (SHDefExtractIcon(p.ExePath, 0, 0, out IntPtr hLarge, out IntPtr hSmall, 64) == 0 && hLarge != IntPtr.Zero)
-            {
-                using var icon = Icon.FromHandle(hLarge);
-                img = icon.ToBitmap();
-                DestroyIcon(hLarge);
-                if (hSmall != IntPtr.Zero) DestroyIcon(hSmall);
-            }
+            img = GameIcons.Load(p.ExePath);
+            _iconCache[p.ExePath] = img;
         }
-        catch
-        {
-        }
-        if (img is null)
-        {
-            try
-            {
-                using var icon = Icon.ExtractAssociatedIcon(p.ExePath);
-                img = icon?.ToBitmap();
-            }
-            catch
-            {
-            }
-        }
-        img ??= SystemIcons.Application.ToBitmap();
-        _iconCache[p.ExePath] = img;
         return img;
     }
 
@@ -718,9 +691,18 @@ public sealed class MainForm : Form
         _emptyPanel.Visible = !any;
 
         if (any)
-            SelectProfile(select ?? (_config.Profiles.Contains(_selected!) ? _selected! : _config.Profiles[0]));
+        {
+            SelectProfile(select
+                ?? (_selected is not null && _config.Profiles.Contains(_selected) ? _selected : null)
+                ?? _config.Profiles.FirstOrDefault(p =>
+                    string.Equals(p.ExePath, _config.SelectedGame, StringComparison.OrdinalIgnoreCase))
+                ?? _config.Profiles[0]);
+        }
         else
+        {
             _selected = null;
+            SelectionChanged?.Invoke();
+        }
     }
 
     private void SelectProfile(GameProfile p)
@@ -729,6 +711,50 @@ public sealed class MainForm : Form
         foreach (var card in _gameList.Controls.OfType<GameRow>())
             card.Selected = card.Profile == p;
         LoadSelectedProfile();
+
+        if (!string.Equals(_config.SelectedGame, p.ExePath, StringComparison.OrdinalIgnoreCase))
+        {
+            _config.SelectedGame = p.ExePath;
+            _save();
+        }
+        SelectionChanged?.Invoke();
+    }
+
+    /// <summary>The game selected in the library — the "main game" the tray flyout shows.</summary>
+    internal GameProfile? SelectedProfile => _selected;
+
+    /// <summary>Raised when <see cref="SelectedProfile"/> changes or the library is edited.</summary>
+    internal event Action? SelectionChanged;
+
+    /// <summary>Makes <paramref name="p"/> the selected game, as if its row had been clicked.</summary>
+    internal void Select(GameProfile p)
+    {
+        if (_config.Profiles.Contains(p))
+            SelectProfile(p);
+    }
+
+    /// <summary>
+    /// Adds a game straight from a running process — the tray flyout's quick add. Selects
+    /// it, and returns the existing profile instead if that .exe is already in the library.
+    /// </summary>
+    internal GameProfile AddGame(string exePath, string name)
+    {
+        var existing = _config.Profiles.FirstOrDefault(p =>
+            string.Equals(p.ExePath, exePath, StringComparison.OrdinalIgnoreCase));
+        if (existing is not null)
+        {
+            SelectProfile(existing);
+            return existing;
+        }
+
+        var profile = new GameProfile { Name = name, ExePath = exePath };
+        _config.Profiles.Add(profile);
+        _save();
+        Logger.Log($"Quick-added {name} ({exePath}) from the tray.");
+        RefreshProfileList(profile);
+        _engine.NotifyProfilesChanged();
+        _statusLabel.Text = $"Added {name}";
+        return profile;
     }
 
     private void AddProfile()

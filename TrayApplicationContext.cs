@@ -15,6 +15,10 @@ public sealed class TrayApplicationContext : ApplicationContext
     private readonly ProcessWatcher _watcher;
     private readonly RuleEngine _engine;
     private readonly MainForm _form;
+    private readonly TrayFlyout _flyout;
+
+    /// <summary>Open "Ready to black out the screens?" prompts, by game process name.</summary>
+    private readonly Dictionary<string, BlackoutPrompt> _blackoutPrompts = new(StringComparer.OrdinalIgnoreCase);
     private readonly HotkeyManager _hotkeys;
     private readonly EventWaitHandle _showEvent;
     private readonly RegisteredWaitHandle _showWait;
@@ -50,6 +54,16 @@ public sealed class TrayApplicationContext : ApplicationContext
 
         _form = new MainForm(_config, Save, _engine, _hotkeys);
         _ = _form.Handle; // force handle creation so BeginInvoke works before first Show
+
+        _flyout = new TrayFlyout(_config, _engine, _form, ShowMainForm);
+        _ = _flyout.Handle;
+
+        _engine.BlackoutConfirmRequested += AskBlackout;
+        _engine.BlackoutConfirmCancelled += profile =>
+        {
+            if (_blackoutPrompts.Remove(profile.ProcessName, out var prompt))
+                prompt.Cancel();
+        };
 
         _baseIcon = LoadAppIcon();
 
@@ -115,7 +129,17 @@ public sealed class TrayApplicationContext : ApplicationContext
             Visible = true,
             ContextMenuStrip = menu,
         };
-        _tray.DoubleClick += (_, _) => ShowMainForm();
+        // Left click: the mini window. Double-click still opens the full window.
+        _tray.MouseClick += (_, e) =>
+        {
+            if (e.Button == MouseButtons.Left)
+                ToggleFlyout();
+        };
+        _tray.DoubleClick += (_, _) =>
+        {
+            _flyout.Hide();
+            ShowMainForm();
+        };
 
         _engine.StateChanged += ApplyState;
         _hotkeys.Changed += ApplyState; // relabel the menu when the combo is rebound
@@ -179,6 +203,40 @@ public sealed class TrayApplicationContext : ApplicationContext
 
     private void Save() => ConfigStore.Save(_config);
 
+    /// <summary>
+    /// Opens or closes the tray flyout. The click on the tray icon is what takes focus away
+    /// from an open flyout, so a flyout that hid itself a moment ago stays shut.
+    /// </summary>
+    private void ToggleFlyout()
+    {
+        if (_flyout.Visible)
+        {
+            _flyout.Hide();
+            return;
+        }
+        if ((DateTime.UtcNow - _flyout.LastHidden).TotalMilliseconds < 300)
+            return;
+        _flyout.ShowNearTray();
+    }
+
+    /// <summary>Asks "Ready to black out the screens?" for a game that just started.</summary>
+    private void AskBlackout(GameProfile profile)
+    {
+        string name = profile.ProcessName;
+        if (_blackoutPrompts.Remove(name, out var old))
+            old.Cancel();
+
+        var prompt = new BlackoutPrompt(profile);
+        prompt.Answered += yes => _engine.AnswerBlackout(profile, yes);
+        prompt.FormClosed += (_, _) =>
+        {
+            if (_blackoutPrompts.TryGetValue(name, out var current) && current == prompt)
+                _blackoutPrompts.Remove(name);
+        };
+        _blackoutPrompts[name] = prompt;
+        prompt.Show();
+    }
+
     private void ShowMainForm()
     {
         _form.Show();
@@ -190,6 +248,10 @@ public sealed class TrayApplicationContext : ApplicationContext
     private void ExitApp()
     {
         _showWait.Unregister(null);
+        foreach (var prompt in _blackoutPrompts.Values.ToList())
+            prompt.Cancel();
+        _blackoutPrompts.Clear();
+        _flyout.Dispose();
         _hotkeys.Dispose();
         _watcher.Dispose();
         _tray.Visible = false;

@@ -35,7 +35,7 @@ public sealed class SettingsForm : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         AutoScaleMode = AutoScaleMode.None;
-        ClientSize = new Size(S(480), S(348));
+        ClientSize = new Size(S(480), S(446));
         BackColor = Theme.Bg;
         ForeColor = Theme.Text;
         Font = Theme.Base;
@@ -148,6 +148,35 @@ public sealed class SettingsForm : Form
         Controls.Add(_hotkeyNote);
         y += S(40);
         Caption("Lifts the \"while playing\" overlays on every display for a look at your other monitors.", y);
+        y += S(38);
+
+        // ===== blackout =====
+        Section("Blackout", y);
+        y += S(32);
+
+        var confirmBlackout = new ToggleSwitch
+        {
+            Checked = _config.ConfirmBlackout,
+            Size = new Size(S(44), S(22)),
+            Location = new Point(S(22), y),
+        };
+        confirmBlackout.CheckedChanged += (_, _) =>
+        {
+            if (_loading) return;
+            _config.ConfirmBlackout = confirmBlackout.Checked;
+            _save();
+        };
+        Controls.Add(confirmBlackout);
+        Controls.Add(new Label
+        {
+            Text = "Ask before blacking out screens",
+            AutoSize = true,
+            ForeColor = Theme.Text,
+            BackColor = Theme.Bg,
+            Location = new Point(confirmBlackout.Right + S(10), y + S(2)),
+        });
+        y += S(28);
+        Caption("When a game that blacks out a screen starts, a small Yes / No window asks first.", y);
         y += S(38);
 
         // ===== this build =====

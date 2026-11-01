@@ -10,6 +10,12 @@ A small Windows tray app that automatically switches HDR on or off per display �
 2. **Set rules per display** — each connected monitor gets a card; choose what happens when the game launches (*Turn HDR on / Turn HDR off / No change*) and when it exits (*Restore previous* — the default, *Turn HDR on / off*, or *No change*).
 3. **Cap the frame rate** — one setting per game, in the profile header: on NVIDIA it sets the driver's per-game frame rate limit, and every display is held at that refresh rate for as long as the game runs (see below).
 4. **While playing** (every display, HDR or not) — optionally *Black out screen* or *Dim screen* for the duration of the game. This is a pure overlay window (click-through, never steals focus, hidden from Alt+Tab) — no display settings are touched, and it disappears the moment the game closes.
+   - Before a blackout goes up, a small **"Ready to black out the screens?"** window asks
+     *Yes* or *No*. *No* leaves the screens on for this run of the game; dimming still
+     applies, and HDR and the FPS cap are applied either way. The window sits on a screen
+     that isn't being blacked out and doesn't take focus from the game; if nobody answers
+     (a fullscreen game can hide it) it says yes on its own after 15 seconds. Turn the
+     question off under **⚙ Settings → Blackout**.
 5. The app watches the process list from the system tray (polling every 2 seconds). When the game appears it snapshots the current HDR state and refresh rate of every display, applies your launch rules, and when the game closes it applies the exit rules (restoring the snapshot by default).
 
 ## Capping the frame rate
@@ -82,14 +88,28 @@ display mode change and no black-screen flicker mid-film.
 ## Settings
 
 **⚙ Settings**, at the bottom of the library list, holds the app-wide things: *Start with
-Windows*, the peek hotkey, which build this is, whether hard frame rate limiting is
+Windows*, the peek hotkey, whether to ask before blacking out screens, which build this is, whether hard frame rate limiting is
 available, and a shortcut to the settings folder. Everything that belongs to one game —
 its rules, its FPS cap, what Play launches — stays on that game's own page.
 
 ## The tray icon
 
-Closing the window hides the app to the tray. Double-click opens the window; right-click
-gives you the current status, **Open**, **Overlays**, **Pause automation**, and **Exit**.
+Closing the window hides the app to the tray. **Left-click** the icon for the mini window;
+double-click opens the full window; right-click gives you the current status, **Open**,
+**Overlays**, **Pause automation**, and **Exit**.
+
+The mini window shows:
+
+- **Main game** — the game selected in the library, whether it's running, and **Play**.
+  **Change** switches to another game in the library (the full window follows, and the
+  choice is remembered across restarts).
+- **Quick add — open apps** — while none of the library's games is open, the programs
+  that are open (anything with a window, minus Windows' own shell) each get a **+ Add**
+  button that adds it to the library and makes it the main game. Start the game, click
+  the tray icon, add it. Its rules start applying on the next 2-second poll.
+- The **Overlays** switch and **Open HDR Toggle**.
+
+It closes when you click anywhere else, or press Esc.
 The icon carries a status dot so you can tell what the app is doing at a glance:
 
 | Dot | Meaning |

@@ -95,6 +95,19 @@ public class AppConfig
         set => PeekHotkey = (Keys)value;
     }
 
+    /// <summary>
+    /// Ask "Ready to black out the screens?" when a game whose profile blacks out a display
+    /// starts, instead of blacking them out straight away. Dimming is never asked about.
+    /// </summary>
+    public bool ConfirmBlackout { get; set; } = true;
+
+    /// <summary>
+    /// The .exe of the game selected in the library — the "main game" the tray flyout shows
+    /// and plays. Kept so the selection survives a restart; null picks the first game.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SelectedGame { get; set; }
+
     /// <summary>HDR state per display path captured before the first game launched; null when no game is active.</summary>
     public Dictionary<string, bool>? HdrSnapshot { get; set; }
 

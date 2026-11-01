@@ -41,6 +41,12 @@ public sealed class RuleEngine
     private const int MaxCapCorrections = 5;
 
     /// <summary>
+    /// Process names of running games whose blackout is waiting on a yes/no from the user.
+    /// Their other overlays (dimming) are already up; only the blackouts are held back.
+    /// </summary>
+    private readonly HashSet<string> _awaitingBlackout = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
     /// The rate each display should be sitting at for the active cap, keyed by device path.
     /// Worked out once when the cap is applied so the poll that holds it only has to read
     /// the current rates, not re-enumerate every mode the displays support.
@@ -60,6 +66,16 @@ public sealed class RuleEngine
 
     /// <summary>Raised whenever <see cref="State"/> may have changed, for the tray icon and UI.</summary>
     public event Action? StateChanged;
+
+    /// <summary>
+    /// A game that blacks out a display just started and <see cref="AppConfig.ConfirmBlackout"/>
+    /// is on. The handler asks the user and answers with <see cref="AnswerBlackout"/>; until then
+    /// the blackout is held back. With no handler attached the blackout goes up straight away.
+    /// </summary>
+    public event Action<GameProfile>? BlackoutConfirmRequested;
+
+    /// <summary>The game exited before its blackout question was answered; drop the question.</summary>
+    public event Action<GameProfile>? BlackoutConfirmCancelled;
 
     public RuleEngine(AppConfig config, Action save)
     {
@@ -217,11 +233,52 @@ public sealed class RuleEngine
         _capCorrections.Clear();
         ApplyFrameCap(ActiveFrameCap());
 
+        bool ask = _config.ConfirmBlackout && BlackoutConfirmRequested is not null && HasBlackout(profile);
         foreach (var (path, action) in profile.OverlayRules)
+        {
+            if (ask && action == OverlayAction.Blackout)
+                continue; // held until the user says yes
             _overlays.Apply(path, action);
+        }
 
         StateChanged?.Invoke();
         StatusChanged?.Invoke($"Applied launch rules for {profile.Name}");
+
+        if (ask && _awaitingBlackout.Add(profile.ProcessName))
+        {
+            Logger.Log($"Asking before blacking out screens for {profile.Name}.");
+            BlackoutConfirmRequested!.Invoke(profile);
+        }
+    }
+
+    private static bool HasBlackout(GameProfile profile) =>
+        profile.OverlayRules.Values.Any(a => a == OverlayAction.Blackout);
+
+    /// <summary>
+    /// The user's answer to "Ready to black out the screens?". Yes puts up the blackouts that
+    /// were held back when the game started; no leaves them down for this run of the game.
+    /// Ignored if the game has already exited or the question was already answered.
+    /// </summary>
+    public void AnswerBlackout(GameProfile profile, bool blackOut)
+    {
+        if (!_awaitingBlackout.Remove(profile.ProcessName) || !_active.Contains(profile.ProcessName))
+            return;
+
+        if (!blackOut)
+        {
+            Logger.Log($"Blackout skipped for {profile.Name}.");
+            StatusChanged?.Invoke($"Screens left on for {profile.Name}");
+            return;
+        }
+
+        foreach (var (path, action) in profile.OverlayRules)
+        {
+            if (action == OverlayAction.Blackout)
+                _overlays.Apply(path, action);
+        }
+        Logger.Log($"Blackout confirmed for {profile.Name}.");
+        StateChanged?.Invoke();
+        StatusChanged?.Invoke($"Screens blacked out for {profile.Name}");
     }
 
     public void OnGameStopped(GameProfile profile)
@@ -230,6 +287,9 @@ public sealed class RuleEngine
 
         _active.Remove(profile.ProcessName);
         _config.ActiveGames = _active.ToList();
+
+        if (_awaitingBlackout.Remove(profile.ProcessName))
+            BlackoutConfirmCancelled?.Invoke(profile);
 
         if (_active.Count > 0)
         {
