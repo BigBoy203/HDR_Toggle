@@ -85,6 +85,24 @@ display mode change and no black-screen flicker mid-film.
   the last profiled game exits, so a press you forgot to undo can't silently disable the
   blackout for the next movie.
 
+## Refresh
+
+If a black-out or dim overlay isn't showing — it never came up, it's on the wrong spot
+after a display change, or something else got on top of it — hit **⟳ Refresh** instead of
+restarting the app. It's beside **⚙ Settings** in the window, in the tray's right-click
+menu, and in the top corner of the tray mini window. It:
+
+- re-checks for running games straight away rather than on the next 2-second poll;
+- tears down every overlay window and puts fresh ones up, from the profiles' rules *as
+  they are now* — so an overlay rule you changed while the game was running takes effect;
+- places them using each monitor's current position, read fresh from the driver;
+- re-arms the overlays if a peek was left on, re-applies the FPS cap, and re-registers the
+  peek hotkey.
+
+HDR isn't touched (switching it mid-game is a display mode change and a flicker), and a
+blackout you answered **No** to stays off until the game is restarted. The status line
+says what it did, e.g. `Refreshed — 2 overlays up for GTAIV`, and `log.txt` records it.
+
 ## Settings
 
 **⚙ Settings**, at the bottom of the library list, holds the app-wide things: *Start with
@@ -96,7 +114,7 @@ its rules, its FPS cap, what Play launches — stays on that game's own page.
 
 Closing the window hides the app to the tray. **Left-click** the icon for the mini window;
 double-click opens the full window; right-click gives you the current status, **Open**,
-**Overlays**, **Pause automation**, and **Exit**.
+**Overlays**, **Pause automation**, **Refresh**, and **Exit**.
 
 The mini window shows:
 
@@ -107,7 +125,7 @@ The mini window shows:
   that are open (anything with a window, minus Windows' own shell) each get a **+ Add**
   button that adds it to the library and makes it the main game. Start the game, click
   the tray icon, add it. Its rules start applying on the next 2-second poll.
-- The **Overlays** switch and **Open HDR Toggle**.
+- The **Overlays** switch, **Open HDR Toggle**, and **⟳ Refresh** (top right).
 
 It closes when you click anywhere else, or press Esc.
 The icon carries a status dot so you can tell what the app is doing at a glance:

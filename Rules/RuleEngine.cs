@@ -46,6 +46,9 @@ public sealed class RuleEngine
     /// </summary>
     private readonly HashSet<string> _awaitingBlackout = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Running games whose blackout the user said no to; a refresh leaves those down too.</summary>
+    private readonly HashSet<string> _declinedBlackout = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>
     /// The rate each display should be sitting at for the active cap, keyed by device path.
     /// Worked out once when the cap is applied so the poll that holds it only has to read
@@ -251,6 +254,45 @@ public sealed class RuleEngine
         }
     }
 
+    /// <summary>
+    /// The Refresh button. Rebuilds the overlays for the games running right now from their
+    /// profiles as they stand — so a rule changed mid-game takes effect — at each monitor's
+    /// current position, re-arms the overlays if a peek was left on, and re-applies the FPS
+    /// cap. HDR is left alone: switching it mid-game is a display mode change and a flicker.
+    /// A blackout still waiting on its question, or one the user said no to, stays down.
+    /// </summary>
+    public void Refresh()
+    {
+        var wanted = new List<KeyValuePair<string, OverlayAction>>();
+        foreach (var profile in _config.Profiles)
+        {
+            if (!profile.Enabled || !_active.Contains(profile.ProcessName))
+                continue;
+            bool holdBlackout = _awaitingBlackout.Contains(profile.ProcessName)
+                || _declinedBlackout.Contains(profile.ProcessName);
+            foreach (var rule in profile.OverlayRules)
+            {
+                if (rule.Value == OverlayAction.Blackout && holdBlackout)
+                    continue;
+                wanted.Add(rule);
+            }
+        }
+        _overlays.Reset(wanted);
+
+        if (_active.Count > 0)
+        {
+            _capCorrections.Clear();
+            ApplyFrameCap(ActiveFrameCap());
+        }
+
+        int shown = _overlays.ShownCount;
+        Logger.Log($"Refreshed: {_active.Count} game(s) running, {shown} overlay(s) up.");
+        StateChanged?.Invoke();
+        StatusChanged?.Invoke(_active.Count == 0
+            ? "Refreshed — no game running, nothing to cover"
+            : $"Refreshed — {shown} overlay{(shown == 1 ? "" : "s")} up for {string.Join(", ", ActiveProfileNames())}");
+    }
+
     private static bool HasBlackout(GameProfile profile) =>
         profile.OverlayRules.Values.Any(a => a == OverlayAction.Blackout);
 
@@ -266,6 +308,7 @@ public sealed class RuleEngine
 
         if (!blackOut)
         {
+            _declinedBlackout.Add(profile.ProcessName);
             Logger.Log($"Blackout skipped for {profile.Name}.");
             StatusChanged?.Invoke($"Screens left on for {profile.Name}");
             return;
@@ -288,6 +331,7 @@ public sealed class RuleEngine
         _active.Remove(profile.ProcessName);
         _config.ActiveGames = _active.ToList();
 
+        _declinedBlackout.Remove(profile.ProcessName);
         if (_awaitingBlackout.Remove(profile.ProcessName))
             BlackoutConfirmCancelled?.Invoke(profile);
 

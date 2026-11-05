@@ -79,6 +79,33 @@ public sealed class OverlayManager
         Sync();
     }
 
+    /// <summary>
+    /// Starts over: every overlay window is torn down, <paramref name="wanted"/> replaces
+    /// what each display should show, the master switch is re-armed, and fresh windows are
+    /// put up at each monitor's current position. This is the Refresh button — it fixes an
+    /// overlay that went missing, landed on the wrong spot after a display mode change, or
+    /// slipped behind another always-on-top window.
+    /// </summary>
+    public void Reset(IEnumerable<KeyValuePair<string, OverlayAction>> wanted)
+    {
+        foreach (var path in _forms.Keys.ToList())
+            Destroy(path);
+
+        _wanted.Clear();
+        foreach (var (path, action) in wanted)
+        {
+            if (action != OverlayAction.None)
+                _wanted[path] = Stronger(_wanted.GetValueOrDefault(path), action);
+        }
+
+        _enabled = true;
+        Sync();
+        Logger.Log($"Overlays rebuilt: {_forms.Count} shown, {_wanted.Count} wanted.");
+    }
+
+    /// <summary>How many overlay windows are up right now.</summary>
+    public int ShownCount => _forms.Count;
+
     /// <summary>Blackout wins over dim when two profiled games overlap on one display.</summary>
     private static OverlayAction Stronger(OverlayAction a, OverlayAction b) =>
         a == OverlayAction.Blackout || b == OverlayAction.Blackout ? OverlayAction.Blackout :
@@ -150,7 +177,8 @@ public sealed class OverlayManager
             var display = HdrController.GetDisplays().FirstOrDefault(d => d.DevicePath == devicePath);
             if (display is null || display.GdiDeviceName.Length == 0)
                 return null;
-            return Screen.AllScreens.FirstOrDefault(s => s.DeviceName == display.GdiDeviceName)?.Bounds;
+            return RefreshRateController.GetBounds(display.GdiDeviceName)
+                ?? Screen.AllScreens.FirstOrDefault(s => s.DeviceName == display.GdiDeviceName)?.Bounds;
         }
         catch
         {

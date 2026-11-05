@@ -34,6 +34,7 @@ internal sealed class TrayFlyout : Form
     private readonly ToggleSwitch _overlayToggle;
     private readonly Label _overlayLabel;
     private readonly Button _openButton;
+    private readonly Button _refreshButton;
 
     /// <summary>Picker labels back to their profiles (labels are made unique).</summary>
     private readonly Dictionary<string, GameProfile> _pickerMap = new();
@@ -51,7 +52,7 @@ internal sealed class TrayFlyout : Form
 
     private int ContentWidth => ClientSize.Width - S(32);
 
-    public TrayFlyout(AppConfig config, RuleEngine engine, MainForm main, Action openMain)
+    public TrayFlyout(AppConfig config, RuleEngine engine, MainForm main, Action openMain, Action refresh)
     {
         _config = config;
         _engine = engine;
@@ -205,10 +206,26 @@ internal sealed class TrayFlyout : Form
             _openMain();
         };
 
+        _refreshButton = new Button
+        {
+            Text = "⟳  Refresh",
+            Font = Theme.Small,
+            AutoSize = true,
+            Padding = new Padding(S(6), S(3), S(6), S(3)),
+        };
+        ControlStyling.StyleButton(_refreshButton, Theme.Field, Theme.Text);
+        _tips.SetToolTip(_refreshButton, "Rebuild the overlays for the running game and re-apply its rules");
+        _refreshButton.Click += (_, _) => BeginInvoke(() =>
+        {
+            refresh();
+            RequestRefresh();
+        });
+
         Controls.AddRange(new Control[]
         {
             title, _statusDot, _statusText, _mainCaption, _gameCard, _changeLabel, _picker,
             _quickPanel, _footerDivider, _overlayToggle, _overlayLabel, _openButton,
+            _refreshButton,
         });
 
         _engine.StateChanged += RequestRefresh;
@@ -265,6 +282,9 @@ internal sealed class TrayFlyout : Form
     {
         SuspendLayout();
         _syncing = true;
+
+        // Top-right of the header, clear of the footer's switch and button.
+        _refreshButton.Location = new Point(ClientSize.Width - S(16) - _refreshButton.Width, S(10));
 
         // ----- status -----
         _statusDot.ForeColor = _engine.State switch

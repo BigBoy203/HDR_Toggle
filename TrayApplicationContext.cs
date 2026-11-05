@@ -55,7 +55,8 @@ public sealed class TrayApplicationContext : ApplicationContext
         _form = new MainForm(_config, Save, _engine, _hotkeys);
         _ = _form.Handle; // force handle creation so BeginInvoke works before first Show
 
-        _flyout = new TrayFlyout(_config, _engine, _form, ShowMainForm);
+        _form.RefreshRequested += RefreshAll;
+        _flyout = new TrayFlyout(_config, _engine, _form, ShowMainForm, RefreshAll);
         _ = _flyout.Handle;
 
         _engine.BlackoutConfirmRequested += AskBlackout;
@@ -104,6 +105,12 @@ public sealed class TrayApplicationContext : ApplicationContext
             _engine.Paused = _pauseItem.Checked;
         };
 
+        var refreshItem = new ToolStripMenuItem("Refresh", null, (_, _) => RefreshAll())
+        {
+            ForeColor = Theme.Text,
+            ToolTipText = "Rebuild the overlays and re-apply the running game's rules",
+        };
+
         var exitItem = new ToolStripMenuItem("Exit", null, (_, _) => ExitApp()) { ForeColor = Theme.Text };
 
         var menu = new ContextMenuStrip
@@ -119,6 +126,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(_overlayItem);
         menu.Items.Add(_pauseItem);
+        menu.Items.Add(refreshItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(exitItem);
 
@@ -217,6 +225,30 @@ public sealed class TrayApplicationContext : ApplicationContext
         if ((DateTime.UtcNow - _flyout.LastHidden).TotalMilliseconds < 300)
             return;
         _flyout.ShowNearTray();
+    }
+
+    /// <summary>
+    /// The Refresh button (window, tray menu, mini window): the fix for overlays that have
+    /// stopped working, short of restarting the app. Picks up any game that started or
+    /// stopped right away rather than on the next poll, rebuilds the overlays from the
+    /// current rules at each monitor's current position, re-applies the FPS cap,
+    /// re-registers the peek hotkey and re-reads the displays on the open page.
+    /// </summary>
+    private void RefreshAll()
+    {
+        Logger.Log("Refresh requested.");
+        try
+        {
+            _watcher.Poll();
+            _engine.Refresh();
+            _hotkeys.Register(_config.PeekHotkey);
+            _form.ReloadDisplays();
+        }
+        catch (Exception ex)
+        {
+            Logger.Log($"Refresh failed: {ex}");
+        }
+        ApplyState();
     }
 
     /// <summary>Asks "Ready to black out the screens?" for a game that just started.</summary>

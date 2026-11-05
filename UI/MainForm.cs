@@ -173,8 +173,7 @@ public sealed class MainForm : Form
 
         var settingsBtn = new Button
         {
-            Dock = DockStyle.Bottom,
-            Height = S(36),
+            Dock = DockStyle.Fill,
             Text = "⚙   Settings",
             Font = Theme.Base,
             TextAlign = ContentAlignment.MiddleLeft,
@@ -182,11 +181,30 @@ public sealed class MainForm : Form
         };
         ControlStyling.StyleButton(settingsBtn, Theme.Field, Theme.Text);
         settingsBtn.Click += (_, _) => ShowSettings();
+
+        // Refresh sits beside Settings: the fix for an overlay that went missing, without
+        // quitting and restarting the app.
+        var refreshAllBtn = new Button
+        {
+            Dock = DockStyle.Right,
+            Width = S(104),
+            Text = "⟳  Refresh",
+            Font = Theme.Base,
+        };
+        ControlStyling.StyleButton(refreshAllBtn, Theme.Field, Theme.Text);
+        _tips.SetToolTip(refreshAllBtn, "Re-check running games and rebuild the black-out / dim overlays\n"
+            + "from the current rules, re-apply the FPS cap and re-register the peek hotkey.\n"
+            + "Use it when an overlay isn't showing — no need to restart the app.");
+        refreshAllBtn.Click += (_, _) => RefreshRequested?.Invoke();
+        var bottomButtons = new Panel { Dock = DockStyle.Bottom, Height = S(36), BackColor = Theme.Sidebar };
+        bottomButtons.Controls.Add(settingsBtn);
+        bottomButtons.Controls.Add(new Panel { Dock = DockStyle.Right, Width = S(8), BackColor = Theme.Sidebar });
+        bottomButtons.Controls.Add(refreshAllBtn);
         var settingsSpacer = new Panel { Dock = DockStyle.Bottom, Height = S(12), BackColor = Theme.Sidebar };
 
         sidebar.Controls.Add(_gameList);
         sidebar.Controls.Add(settingsSpacer);
-        sidebar.Controls.Add(settingsBtn);
+        sidebar.Controls.Add(bottomButtons);
         sidebar.Controls.Add(addBtnSpacer);
         sidebar.Controls.Add(addBtn);
         sidebar.Controls.Add(gamesLabel);
@@ -719,6 +737,12 @@ public sealed class MainForm : Form
         }
         SelectionChanged?.Invoke();
     }
+
+    /// <summary>The Refresh button was clicked; the app context does the actual refresh.</summary>
+    internal event Action? RefreshRequested;
+
+    /// <summary>Re-reads the displays for the page on show, after a refresh.</summary>
+    internal void ReloadDisplays() => LoadSelectedProfile();
 
     /// <summary>The game selected in the library — the "main game" the tray flyout shows.</summary>
     internal GameProfile? SelectedProfile => _selected;

@@ -85,6 +85,18 @@ public static class RefreshRateController
             && EnumDisplaySettingsEx(gdiDeviceName, ENUM_CURRENT_SETTINGS, ref mode, 0);
     }
 
+    /// <summary>
+    /// Where the display sits on the desktop right now, read fresh from the driver rather
+    /// than from WinForms' cached <see cref="Screen"/> list, which can lag behind a mode
+    /// change (an HDR switch, a refresh-rate change, a monitor waking up). Null if unknown.
+    /// </summary>
+    public static Rectangle? GetBounds(string gdiDeviceName)
+    {
+        if (!TryGetCurrentMode(gdiDeviceName, out var mode) || mode.dmPelsWidth == 0 || mode.dmPelsHeight == 0)
+            return null;
+        return new Rectangle(mode.dmPositionX, mode.dmPositionY, (int)mode.dmPelsWidth, (int)mode.dmPelsHeight);
+    }
+
     /// <summary>Refresh rate the display is running at right now, in Hz; 0 if it can't be read.</summary>
     public static int GetCurrentRate(string gdiDeviceName) =>
         TryGetCurrentMode(gdiDeviceName, out var mode) ? (int)mode.dmDisplayFrequency : 0;
