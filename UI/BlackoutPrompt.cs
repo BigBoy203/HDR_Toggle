@@ -6,7 +6,7 @@ namespace HdrToggle.UI;
 /// <summary>
 /// The small "Ready to black out the screens?" window shown when a game whose profile
 /// blacks out a display starts. Yes puts the blackout up, No leaves the screens on for
-/// this run of the game.
+/// this run of the game (the peek hotkey can still put it up later).
 ///
 /// It sits on top without taking focus, so a game starting up isn't knocked out of its
 /// window, and it goes on a screen that isn't about to be blacked out. If nobody answers
