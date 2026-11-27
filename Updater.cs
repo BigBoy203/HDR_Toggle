@@ -106,6 +106,11 @@ public static class Updater
         if (bytes.Length < 1024 || bytes[0] != 'M' || bytes[1] != 'Z')
             throw new UpdateException("The download isn't a Windows program. Nothing was changed.");
 
+        if (!IsSingleFileBundle(bytes))
+            throw new UpdateException($"Release {update.Tag}'s {AssetName} can't run on its own — it's the small "
+                + "launcher from a normal build, which needs HdrToggle.dll beside it. The release should have the exe "
+                + @"from bin\Release\net10.0-windows\win-x64\publish\ instead. Nothing was changed.");
+
         if (update.Sha256 is { } expected
             && !Convert.ToHexString(SHA256.HashData(bytes)).Equals(expected, StringComparison.OrdinalIgnoreCase))
             throw new UpdateException("The download doesn't match the checksum GitHub published for it. Nothing was changed.");
@@ -230,6 +235,26 @@ public static class Updater
     {
         if (File.Exists(OldExePath))
             File.Delete(OldExePath);
+    }
+
+    /// <summary>
+    /// The .NET host marks its bundle header with a fixed 32-byte signature, preceded by the
+    /// header's offset. A single-file publish (the exe that runs on its own) has a real
+    /// offset there; a plain build's launcher has 0, and needs HdrToggle.dll beside it.
+    /// Installing that one would leave an exe that can't start.
+    /// </summary>
+    private static bool IsSingleFileBundle(byte[] exe)
+    {
+        ReadOnlySpan<byte> signature =
+        [
+            0x8b, 0x12, 0x02, 0xb9, 0x6a, 0x61, 0x20, 0x38, 0x72, 0x7b, 0x93, 0x02, 0x14, 0xd7, 0xa0, 0x32,
+            0x13, 0xf5, 0xb9, 0xe6, 0xef, 0xae, 0x33, 0x18, 0xee, 0x3b, 0x2d, 0xce, 0x24, 0xb3, 0x6a, 0xae,
+        ];
+        int at = exe.AsSpan().IndexOf(signature);
+        if (at < 8)
+            return false;
+        long headerOffset = BitConverter.ToInt64(exe, at - 8);
+        return headerOffset > 0 && headerOffset < exe.Length;
     }
 
     private static string HashFile(string path)

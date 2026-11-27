@@ -1,9 +1,10 @@
 {
   "version": 2,
-  "dgSpecHash": "h9VjayZstcM=",
+  "dgSpecHash": "Qa6ji5JiIjI=",
   "success": true,
   "projectFilePath": "/home/user/HDR_Toggle/HdrToggle.csproj",
   "expectedPackageFiles": [
+    "/root/.nuget/packages/microsoft.net.illink.tasks/10.0.14/microsoft.net.illink.tasks.10.0.14.nupkg.sha512",
     "/root/.nuget/packages/microsoft.windowsdesktop.app.ref/10.0.14/microsoft.windowsdesktop.app.ref.10.0.14.nupkg.sha512",
     "/root/.nuget/packages/microsoft.netcore.app.host.win-x64/10.0.14/microsoft.netcore.app.host.win-x64.10.0.14.nupkg.sha512"
   ],

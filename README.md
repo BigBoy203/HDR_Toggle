@@ -151,7 +151,10 @@ button and written to `log.txt`.
 
 **Publishing an update:** bump `<Version>` in `HdrToggle.csproj`, publish, and create a
 GitHub release whose tag is the version (`1.7`, `1.7.0` or `v1.7.0` all work) with the
-published `HdrToggle.exe` attached. The tag and the exe's built-in version both have to be
+published `HdrToggle.exe` attached — the one in
+`bin\Release\net10.0-windows\win-x64\publish\` (about 350 KB). That's the only build
+that runs on its own; the updater refuses a launcher-only exe that would need
+`HdrToggle.dll` beside it. The tag and the exe's built-in version both have to be
 newer than what people are running — an exe that still says the old version is refused
 rather than installed in a loop.
 

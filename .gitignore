@@ -1,0 +1,9 @@
+# The exe to run and to attach to releases is bin/Release/net10.0-windows/win-x64/publish/HdrToggle.exe.
+# Keep the other build outputs named HdrToggle.exe out of the repo: they are only launchers that
+# need HdrToggle.dll beside them, and a stale one is easy to grab by mistake.
+/bin/Release/net10.0-windows/*.*
+/bin/Release/net10.0-windows/HdrToggle
+/bin/Release/net10.0-windows/win-x64/HdrToggle.exe
+/obj/**/apphost
+/obj/**/*.sourcelink.json
+/obj/**/PublishOutputs.*.txt
