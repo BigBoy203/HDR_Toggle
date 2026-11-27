@@ -12,7 +12,9 @@ A small Windows tray app that automatically switches HDR on or off per display �
 4. **While playing** (every display, HDR or not) — optionally *Black out screen* or *Dim screen* for the duration of the game. This is a pure overlay window (click-through, never steals focus, hidden from Alt+Tab) — no display settings are touched, and it disappears the moment the game closes.
    - Before a blackout goes up, a small **"Ready to black out the screens?"** window asks
      *Yes* or *No*. *No* leaves the screens on for this run of the game; dimming still
-     applies, and HDR and the FPS cap are applied either way. The window sits on a screen
+     applies, and HDR and the FPS cap are applied either way. Changed your mind? Press
+     the peek hotkey and the blackout goes up (it also answers *Yes* while the question
+     is still open). The window sits on a screen
      that isn't being blacked out and doesn't take focus from the game; if nobody answers
      (a fullscreen game can hide it) it says yes on its own after 15 seconds. Turn the
      question off under **⚙ Settings → Blackout**.
@@ -84,6 +86,8 @@ display mode change and no black-screen flicker mid-film.
 - A peek is a moment, not a setting: it isn't saved to disk, and it re-arms itself when
   the last profiled game exits, so a press you forgot to undo can't silently disable the
   blackout for the next movie.
+- If you answered **No** to the blackout question, the next press puts the blackout up
+  instead of peeking (there's nothing up to peek past); presses after that peek as usual.
 
 ## Refresh
 
@@ -100,7 +104,7 @@ menu, and in the top corner of the tray mini window. It:
   peek hotkey.
 
 HDR isn't touched (switching it mid-game is a display mode change and a flicker), and a
-blackout you answered **No** to stays off until the game is restarted. The status line
+blackout you answered **No** to stays off (press the peek hotkey to put it up). The status line
 says what it did, e.g. `Refreshed — 2 overlays up for GTAIV`, and `log.txt` records it.
 
 ## Settings

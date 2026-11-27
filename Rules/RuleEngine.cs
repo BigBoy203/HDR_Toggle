@@ -122,8 +122,53 @@ public sealed class RuleEngine
         }
     }
 
-    /// <summary>Flips the overlay master switch; wired to the tray menu and the peek hotkey.</summary>
-    public void ToggleOverlays() => OverlaysEnabled = !OverlaysEnabled;
+    /// <summary>
+    /// The peek hotkey. Normally flips the overlay master switch. But if a running game's
+    /// blackout is being held back — the user answered No, or the question is still open —
+    /// there is nothing on screen for a flip to lift or restore, so the press would look
+    /// dead. Instead it puts that blackout up (and closes any open question), and from then
+    /// on presses peek as usual.
+    /// </summary>
+    public void ToggleOverlays()
+    {
+        if (BringUpHeldBlackouts())
+            return;
+        OverlaysEnabled = !OverlaysEnabled;
+    }
+
+    /// <summary>
+    /// Puts up every blackout held back for a running game, whether declined or still
+    /// waiting on its question. Returns false when there was nothing held back.
+    /// </summary>
+    private bool BringUpHeldBlackouts()
+    {
+        var held = _config.Profiles
+            .Where(p => p.Enabled && _active.Contains(p.ProcessName)
+                && (_declinedBlackout.Contains(p.ProcessName) || _awaitingBlackout.Contains(p.ProcessName)))
+            .ToList();
+        if (held.Count == 0)
+            return false;
+
+        // Re-arm the master switch first, so the blackouts below appear as they are applied.
+        _overlays.Enabled = true;
+        foreach (var profile in held)
+        {
+            _declinedBlackout.Remove(profile.ProcessName);
+            if (_awaitingBlackout.Remove(profile.ProcessName))
+                BlackoutConfirmCancelled?.Invoke(profile); // the hotkey answered it
+
+            foreach (var (path, action) in profile.OverlayRules)
+            {
+                if (action == OverlayAction.Blackout)
+                    _overlays.Apply(path, action);
+            }
+            Logger.Log($"Blackout put up by the peek hotkey for {profile.Name}.");
+        }
+
+        StateChanged?.Invoke();
+        StatusChanged?.Invoke($"Screens blacked out for {string.Join(", ", held.Select(p => p.Name))}");
+        return true;
+    }
 
     public AppState State =>
         _config.Paused ? AppState.Paused :
@@ -259,7 +304,8 @@ public sealed class RuleEngine
     /// profiles as they stand — so a rule changed mid-game takes effect — at each monitor's
     /// current position, re-arms the overlays if a peek was left on, and re-applies the FPS
     /// cap. HDR is left alone: switching it mid-game is a display mode change and a flicker.
-    /// A blackout still waiting on its question, or one the user said no to, stays down.
+    /// A blackout still waiting on its question, or one the user said no to, stays down
+    /// (the peek hotkey is what puts those up).
     /// </summary>
     public void Refresh()
     {
@@ -310,7 +356,9 @@ public sealed class RuleEngine
         {
             _declinedBlackout.Add(profile.ProcessName);
             Logger.Log($"Blackout skipped for {profile.Name}.");
-            StatusChanged?.Invoke($"Screens left on for {profile.Name}");
+            StatusChanged?.Invoke(_config.PeekHotkey == Keys.None
+                ? $"Screens left on for {profile.Name}"
+                : $"Screens left on for {profile.Name} — press {Monitoring.HotkeyManager.Describe(_config.PeekHotkey)} to black them out");
             return;
         }
 
