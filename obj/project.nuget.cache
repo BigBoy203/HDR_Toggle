@@ -1,10 +1,12 @@
 {
   "version": 2,
-  "dgSpecHash": "1A35BTNpOY8=",
+  "dgSpecHash": "kiT0VeMb/ds=",
   "success": true,
-  "projectFilePath": "D:\\Vibe Code Projects\\!Projects\\HDR_toggle\\HdrToggle.csproj",
+  "projectFilePath": "/home/user/HDR_Toggle/HdrToggle.csproj",
   "expectedPackageFiles": [
-    "C:\\Users\\kingk\\.nuget\\packages\\microsoft.net.illink.tasks\\10.0.3\\microsoft.net.illink.tasks.10.0.3.nupkg.sha512"
+    "/root/.nuget/packages/microsoft.net.illink.tasks/10.0.14/microsoft.net.illink.tasks.10.0.14.nupkg.sha512",
+    "/root/.nuget/packages/microsoft.windowsdesktop.app.ref/10.0.14/microsoft.windowsdesktop.app.ref.10.0.14.nupkg.sha512",
+    "/root/.nuget/packages/microsoft.netcore.app.host.win-x64/10.0.14/microsoft.netcore.app.host.win-x64.10.0.14.nupkg.sha512"
   ],
   "logs": []
 }

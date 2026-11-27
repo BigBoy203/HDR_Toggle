@@ -601,10 +601,33 @@ public sealed class MainForm : Form
         LoadSelectedProfile();
     }
 
-    private void ShowSettings()
+    /// <summary>Raised after Settings installed an update: the app should restart into it.</summary>
+    public event Action? RestartForUpdateRequested;
+
+    private SettingsForm? _openSettings;
+
+    public void ShowSettings(bool checkForUpdates = false)
     {
-        using var settings = new SettingsForm(_config, _save, _hotkeys, AppVersion, BuildStamp);
+        if (_openSettings is { IsDisposed: false } open)
+        {
+            open.Activate();
+            if (checkForUpdates) open.CheckForUpdates();
+            return;
+        }
+
+        using var settings = new SettingsForm(_config, _save, _hotkeys, AppVersion, BuildStamp,
+            () => _engine.GameActive);
+        _openSettings = settings;
+        if (checkForUpdates)
+            settings.Shown += (_, _) => settings.CheckForUpdates();
         settings.ShowDialog(this);
+        _openSettings = null;
+
+        if (settings.UpdateInstalled)
+        {
+            RestartForUpdateRequested?.Invoke();
+            return;
+        }
         // The peek combo may have changed while the dialog was open.
         ApplyHotkeyTooltip();
         UpdateStatus();

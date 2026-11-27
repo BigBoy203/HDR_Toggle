@@ -12,6 +12,14 @@ internal static class Program
         }
 
         using var mutex = new Mutex(initiallyOwned: true, "HdrToggle_SingleInstance", out bool isFirstInstance);
+        bool afterUpdate = args.Contains(Updater.AfterUpdateArg);
+        if (!isFirstInstance && afterUpdate)
+        {
+            // Started by the version this one just replaced: it is on its way out, so wait
+            // for it to let go rather than handing over to it.
+            try { isFirstInstance = mutex.WaitOne(TimeSpan.FromSeconds(30)); }
+            catch (AbandonedMutexException) { isFirstInstance = true; }
+        }
         if (!isFirstInstance)
         {
             // Another instance is running; ask it to show its window.
@@ -26,7 +34,9 @@ internal static class Program
             return;
         }
 
+        Updater.CleanUpAfterUpdate();
+
         ApplicationConfiguration.Initialize();
-        Application.Run(new TrayApplicationContext(startHidden: args.Contains("--tray")));
+        Application.Run(new TrayApplicationContext(startHidden: args.Contains("--tray"), justUpdated: afterUpdate));
     }
 }

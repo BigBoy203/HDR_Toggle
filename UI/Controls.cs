@@ -65,6 +65,13 @@ internal class ToggleSwitch : Control
         Size = new Size(44, 22);
     }
 
+    protected override void OnEnabledChanged(EventArgs e)
+    {
+        Invalidate();
+        Cursor = Enabled ? Cursors.Hand : Cursors.Default;
+        base.OnEnabledChanged(e);
+    }
+
     protected override void OnClick(EventArgs e)
     {
         Checked = !Checked;
@@ -77,14 +84,16 @@ internal class ToggleSwitch : Control
         g.SmoothingMode = SmoothingMode.AntiAlias;
         var track = new RectangleF(0.5f, 0.5f, Width - 1, Height - 1);
         using (var path = Theme.RoundedRect(track, (Height - 1) / 2f))
-        using (var fill = new SolidBrush(_checked ? Theme.Accent : Theme.TrackOff))
+        using (var fill = new SolidBrush(Enabled
+                   ? (_checked ? Theme.Accent : Theme.TrackOff)
+                   : Color.FromArgb(90, _checked ? Theme.Accent : Theme.TrackOff)))
         {
             g.FillPath(fill, path);
         }
         float pad = Height * 0.14f;
         float knob = Height - pad * 2;
         float x = _checked ? Width - pad - knob : pad;
-        using var knobBrush = new SolidBrush(Color.White);
+        using var knobBrush = new SolidBrush(Enabled ? Color.White : Color.FromArgb(140, Color.White));
         g.FillEllipse(knobBrush, x, pad, knob, knob);
     }
 }

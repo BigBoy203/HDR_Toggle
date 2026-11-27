@@ -106,15 +106,49 @@ says what it did, e.g. `Refreshed — 2 overlays up for GTAIV`, and `log.txt` re
 ## Settings
 
 **⚙ Settings**, at the bottom of the library list, holds the app-wide things: *Start with
-Windows*, the peek hotkey, whether to ask before blacking out screens, which build this is, whether hard frame rate limiting is
+Windows* and *Start hidden in the tray*, **Check for updates**, the peek hotkey, whether to ask before blacking out screens, which build this is, whether hard frame rate limiting is
 available, and a shortcut to the settings folder. Everything that belongs to one game —
 its rules, its FPS cap, what Play launches — stays on that game's own page.
+
+### Starting with Windows
+
+- **Start with Windows** adds HDR Toggle to your Windows startup apps (a `HKCU\...\Run`
+  entry, no admin needed). Turning it off removes the entry.
+- **Start hidden in the tray** (on by default) decides what that login launch looks like:
+  on, the app starts quietly in the tray; off, the window opens. It's greyed out while
+  *Start with Windows* is off, and it only affects the login launch — starting the app
+  yourself always opens the window.
+
+### Updating
+
+**Check for updates** (in Settings, and in the tray's right-click menu) asks GitHub for the
+latest release of this repo. If it's newer than the running build, the button becomes
+**Update to x.y.z**; click it, confirm, and the app:
+
+1. downloads the release's `HdrToggle.exe` and checks it against the SHA-256 checksum
+   GitHub publishes for it (and that the exe really is a newer version);
+2. moves the running exe aside to `HdrToggle.exe.old` and puts the new one in its place —
+   same folder, same name, so shortcuts and the startup entry keep working;
+3. restarts into the new version, which deletes the `.old` file and pops a tray
+   notification saying which version you're on.
+
+Games, rules and settings live in `%APPDATA%\HdrToggle` and aren't touched. If the exe sits
+in a folder you can't write to without admin (e.g. Program Files), Windows asks for
+permission once to swap the files; the app itself still runs as you. If anything fails
+along the way, the current version stays in place and the reason is shown under the
+button and written to `log.txt`.
+
+**Publishing an update:** bump `<Version>` in `HdrToggle.csproj`, publish, and create a
+GitHub release whose tag is the version (`1.7`, `1.7.0` or `v1.7.0` all work) with the
+published `HdrToggle.exe` attached. The tag and the exe's built-in version both have to be
+newer than what people are running — an exe that still says the old version is refused
+rather than installed in a loop.
 
 ## The tray icon
 
 Closing the window hides the app to the tray. **Left-click** the icon for the mini window;
 double-click opens the full window; right-click gives you the current status, **Open**,
-**Overlays**, **Pause automation**, **Refresh**, and **Exit**.
+**Overlays**, **Pause automation**, **Refresh**, **Check for updates…**, and **Exit**.
 
 The mini window shows:
 
@@ -144,7 +178,7 @@ The icon carries a status dot so you can tell what the app is doing at a glance:
   rebuild actually replaced the running exe. The same version line is written to `log.txt`
   at every start.
 - Published exe: `bin\Release\net10.0-windows\win-x64\publish\HdrToggle.exe` (framework-dependent; needs the .NET 10 Desktop Runtime).
-- **Start with Windows**: checkbox in the app — writes a `HKCU\...\Run` entry that launches the app minimized to the tray (`--tray`).
+- **Start with Windows**: switch in Settings — writes a `HKCU\...\Run` entry; with *Start hidden in the tray* on (the default) it launches with `--tray`, so the window stays closed.
 - Config lives in `%APPDATA%\HdrToggle\config.json`; a small activity log is written to `%APPDATA%\HdrToggle\log.txt`. If the config ever fails to parse it is copied to `config.bad.json` before the app starts fresh, so profiles are recoverable.
 
 ### Command-line helpers

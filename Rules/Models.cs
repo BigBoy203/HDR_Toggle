@@ -74,6 +74,12 @@ public class AppConfig
 {
     public List<GameProfile> Profiles { get; set; } = new();
     public bool StartWithWindows { get; set; }
+
+    /// <summary>
+    /// When Windows starts the app at login, stay in the tray instead of opening the window.
+    /// Only affects the login launch; starting the app by hand always shows the window.
+    /// </summary>
+    public bool StartHidden { get; set; } = true;
     public bool Paused { get; set; }
 
     /// <summary>

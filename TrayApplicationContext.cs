@@ -33,7 +33,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     /// <summary>Set while pushing engine state into the menu, so echoes don't loop back.</summary>
     private bool _syncing;
 
-    public TrayApplicationContext(bool startHidden)
+    public TrayApplicationContext(bool startHidden, bool justUpdated = false)
     {
         Logger.Log($"HDR Toggle {Application.ProductVersion.Split('+')[0]} starting.");
         _config = ConfigStore.Load();
@@ -56,6 +56,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         _ = _form.Handle; // force handle creation so BeginInvoke works before first Show
 
         _form.RefreshRequested += RefreshAll;
+        _form.RestartForUpdateRequested += RestartForUpdate;
         _flyout = new TrayFlyout(_config, _engine, _form, ShowMainForm, RefreshAll);
         _ = _flyout.Handle;
 
@@ -111,6 +112,15 @@ public sealed class TrayApplicationContext : ApplicationContext
             ToolTipText = "Rebuild the overlays and re-apply the running game's rules",
         };
 
+        var updateItem = new ToolStripMenuItem("Check for updates…", null, (_, _) =>
+        {
+            ShowMainForm();
+            _form.ShowSettings(checkForUpdates: true);
+        })
+        {
+            ForeColor = Theme.Text,
+        };
+
         var exitItem = new ToolStripMenuItem("Exit", null, (_, _) => ExitApp()) { ForeColor = Theme.Text };
 
         var menu = new ContextMenuStrip
@@ -128,6 +138,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         menu.Items.Add(_pauseItem);
         menu.Items.Add(refreshItem);
         menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add(updateItem);
         menu.Items.Add(exitItem);
 
         _tray = new NotifyIcon
@@ -153,7 +164,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         _hotkeys.Changed += ApplyState; // relabel the menu when the combo is rebound
         ApplyState();
 
-        Autostart.Sync(_config.StartWithWindows);
+        Autostart.Sync(_config.StartWithWindows, _config.StartHidden);
 
         // Second instances signal this event to bring the existing window up.
         _showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName);
@@ -162,6 +173,34 @@ public sealed class TrayApplicationContext : ApplicationContext
 
         if (!startHidden)
             ShowMainForm();
+
+        if (justUpdated)
+        {
+            string version = Updater.CurrentVersion.ToString(3);
+            Logger.Log($"Now running {version} after an update.");
+            _tray.ShowBalloonTip(4000, "HDR Toggle updated", $"You're now on version {version}.", ToolTipIcon.Info);
+        }
+    }
+
+    /// <summary>
+    /// The new exe is in place: start it and get out of its way. It waits on the
+    /// single-instance mutex until this process has exited.
+    /// </summary>
+    private void RestartForUpdate()
+    {
+        try
+        {
+            Updater.Relaunch();
+        }
+        catch (Exception ex)
+        {
+            Logger.Log($"Could not start the updated exe: {ex}");
+            MessageBox.Show(_form, "The update is installed, but the new version couldn't be started:\n"
+                + $"{ex.Message}\n\nClose HDR Toggle and start it again to finish.", "HDR Toggle",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        ExitApp();
     }
 
     /// <summary>Pushes the engine's current state into the tray icon, tooltip and menu.</summary>
