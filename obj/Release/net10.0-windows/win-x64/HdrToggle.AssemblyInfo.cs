@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("HdrToggle")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.7.1.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.7.1+89d630affe0173bb2ef83ec5accc182dcfb89d17")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.7.1+40488d04cef9556c92d42339e4b5ff5ad8f2964d")]
 [assembly: System.Reflection.AssemblyProductAttribute("HdrToggle")]
 [assembly: System.Reflection.AssemblyTitleAttribute("HdrToggle")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.7.1.0")]
