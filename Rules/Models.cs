@@ -80,6 +80,12 @@ public class AppConfig
     /// Only affects the login launch; starting the app by hand always shows the window.
     /// </summary>
     public bool StartHidden { get; set; } = true;
+
+    /// <summary>
+    /// Quietly ask GitHub for a newer release shortly after the app starts (and once a day
+    /// while it keeps running), and say so with a tray notification. Never installs by itself.
+    /// </summary>
+    public bool CheckForUpdatesAutomatically { get; set; } = true;
     public bool Paused { get; set; }
 
     /// <summary>

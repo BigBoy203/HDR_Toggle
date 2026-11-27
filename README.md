@@ -132,6 +132,13 @@ latest release of this repo. If it's newer than the running build, the button be
 3. restarts into the new version, which deletes the `.old` file and pops a tray
    notification saying which version you're on.
 
+**Automatic checks:** with *Check for updates automatically* on (the default), the app
+checks in the background about 20 seconds after it starts and then once a day while it
+keeps running. The check never holds up the window or the tray, and it never installs
+anything by itself: when there's a newer version, a tray notification says so (once per
+version) and the tray menu item turns into **Update to x.y.z…**. Clicking either opens
+Settings at the update button. A failed check is only logged and tried again the next day.
+
 Games, rules and settings live in `%APPDATA%\HdrToggle` and aren't touched. If the exe sits
 in a folder you can't write to without admin (e.g. Program Files), Windows asks for
 permission once to swap the files; the app itself still runs as you. If anything fails

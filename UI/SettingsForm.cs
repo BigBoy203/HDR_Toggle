@@ -48,7 +48,7 @@ public sealed class SettingsForm : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         AutoScaleMode = AutoScaleMode.None;
-        ClientSize = new Size(S(480), S(624));
+        ClientSize = new Size(S(480), S(690));
         BackColor = Theme.Bg;
         ForeColor = Theme.Text;
         Font = Theme.Base;
@@ -262,6 +262,32 @@ public sealed class SettingsForm : Form
         y += S(44);
         Caption("Downloads the newest release from GitHub, replaces this copy of HDR Toggle and restarts it. "
             + "Your games and settings are kept.", y);
+        y += S(44);
+
+        var autoCheck = new ToggleSwitch
+        {
+            Checked = _config.CheckForUpdatesAutomatically,
+            Size = new Size(S(44), S(22)),
+            Location = new Point(S(22), y),
+        };
+        autoCheck.CheckedChanged += (_, _) =>
+        {
+            if (_loading) return;
+            _config.CheckForUpdatesAutomatically = autoCheck.Checked;
+            _save();
+        };
+        Controls.Add(autoCheck);
+        Controls.Add(new Label
+        {
+            Text = "Check for updates automatically",
+            AutoSize = true,
+            ForeColor = Theme.Text,
+            BackColor = Theme.Bg,
+            Location = new Point(autoCheck.Right + S(10), y + S(2)),
+        });
+        y += S(28);
+        Caption("Checks in the background after startup and once a day, and shows a tray notification "
+            + "when there's a new version. It never installs without asking.", y);
         y += S(46);
 
         // ===== this build =====

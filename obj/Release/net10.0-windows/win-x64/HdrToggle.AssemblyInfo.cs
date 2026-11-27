@@ -12,11 +12,11 @@ using System.Reflection;
 
 [assembly: System.Reflection.AssemblyCompanyAttribute("HdrToggle")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
-[assembly: System.Reflection.AssemblyFileVersionAttribute("1.7.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.7.0+962745a35c6c3e828b2df2afd4b5447b5349ca25")]
+[assembly: System.Reflection.AssemblyFileVersionAttribute("1.7.1.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.7.1+89d630affe0173bb2ef83ec5accc182dcfb89d17")]
 [assembly: System.Reflection.AssemblyProductAttribute("HdrToggle")]
 [assembly: System.Reflection.AssemblyTitleAttribute("HdrToggle")]
-[assembly: System.Reflection.AssemblyVersionAttribute("1.7.0.0")]
+[assembly: System.Reflection.AssemblyVersionAttribute("1.7.1.0")]
 [assembly: System.Runtime.Versioning.TargetPlatformAttribute("Windows7.0")]
 [assembly: System.Runtime.Versioning.SupportedOSPlatformAttribute("Windows7.0")]
 

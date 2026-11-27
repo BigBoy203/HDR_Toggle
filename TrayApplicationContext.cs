@@ -26,6 +26,17 @@ public sealed class TrayApplicationContext : ApplicationContext
     private readonly ToolStripLabel _statusItem;
     private readonly ToolStripMenuItem _overlayItem;
     private readonly ToolStripMenuItem _pauseItem;
+    private readonly ToolStripMenuItem _updateItem;
+
+    /// <summary>Background update check: first shortly after start, then daily.</summary>
+    private readonly System.Windows.Forms.Timer _updateTimer;
+    private const int FirstUpdateCheckMs = 20_000;     // let login and the first polls settle
+    private const int UpdateCheckIntervalMs = 86_400_000; // 24 h
+    private readonly CancellationTokenSource _exiting = new();
+
+    /// <summary>The newer release the last background check found, if any.</summary>
+    private UpdateInfo? _pendingUpdate;
+    private bool _updateBalloonShowing;
 
     private readonly Icon _baseIcon;
     private readonly Dictionary<AppState, Icon> _stateIcons = new();
@@ -112,11 +123,7 @@ public sealed class TrayApplicationContext : ApplicationContext
             ToolTipText = "Rebuild the overlays and re-apply the running game's rules",
         };
 
-        var updateItem = new ToolStripMenuItem("Check for updates…", null, (_, _) =>
-        {
-            ShowMainForm();
-            _form.ShowSettings(checkForUpdates: true);
-        })
+        _updateItem = new ToolStripMenuItem("Check for updates…", null, (_, _) => OpenUpdateSettings())
         {
             ForeColor = Theme.Text,
         };
@@ -138,7 +145,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         menu.Items.Add(_pauseItem);
         menu.Items.Add(refreshItem);
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add(updateItem);
+        menu.Items.Add(_updateItem);
         menu.Items.Add(exitItem);
 
         _tray = new NotifyIcon
@@ -180,6 +187,69 @@ public sealed class TrayApplicationContext : ApplicationContext
             Logger.Log($"Now running {version} after an update.");
             _tray.ShowBalloonTip(4000, "HDR Toggle updated", $"You're now on version {version}.", ToolTipIcon.Info);
         }
+
+        // Clicking the "update available" notification opens Settings on the update.
+        _tray.BalloonTipClicked += (_, _) =>
+        {
+            if (_updateBalloonShowing) OpenUpdateSettings();
+            _updateBalloonShowing = false;
+        };
+        _tray.BalloonTipClosed += (_, _) => _updateBalloonShowing = false;
+
+        _updateTimer = new System.Windows.Forms.Timer { Interval = FirstUpdateCheckMs };
+        _updateTimer.Tick += async (_, _) =>
+        {
+            _updateTimer.Interval = UpdateCheckIntervalMs;
+            await CheckForUpdatesInBackground();
+        };
+        _updateTimer.Start();
+    }
+
+    private void OpenUpdateSettings()
+    {
+        _flyout.Hide();
+        ShowMainForm();
+        _form.ShowSettings(checkForUpdates: true);
+    }
+
+    /// <summary>
+    /// The automatic check. The network call runs on the thread pool so the tray and window
+    /// never wait on GitHub; only the result comes back to the UI thread. Failures are just
+    /// logged — a missed check is retried tomorrow, and the button in Settings still works.
+    /// </summary>
+    private async Task CheckForUpdatesInBackground()
+    {
+        if (!_config.CheckForUpdatesAutomatically)
+            return;
+
+        UpdateInfo? update;
+        try
+        {
+            var token = _exiting.Token;
+            update = await Task.Run(() => Updater.CheckAsync(token), token);
+        }
+        catch (Exception ex)
+        {
+            if (!_exiting.IsCancellationRequested)
+                Logger.Log($"Background update check failed: {ex.Message}");
+            return;
+        }
+        if (_exiting.IsCancellationRequested || update is null)
+            return;
+
+        string version = update.Version.ToString(3);
+        _updateItem.Text = $"Update to {version}…";
+        _updateItem.Font = new Font(Theme.Base, FontStyle.Bold);
+
+        // Once per version: the daily re-check shouldn't nag about the same release.
+        if (_pendingUpdate?.Version == update.Version)
+            return;
+        _pendingUpdate = update;
+        Logger.Log($"Update {version} is available.");
+        _updateBalloonShowing = true;
+        _tray.ShowBalloonTip(8000, "HDR Toggle update available",
+            $"Version {version} is out (you have {Updater.CurrentVersion.ToString(3)}). Click to update.",
+            ToolTipIcon.Info);
     }
 
     /// <summary>
@@ -325,6 +395,8 @@ public sealed class TrayApplicationContext : ApplicationContext
         _flyout.Dispose();
         _hotkeys.Dispose();
         _watcher.Dispose();
+        _exiting.Cancel();
+        _updateTimer.Dispose();
         _tray.Visible = false;
         _tray.Dispose();
         foreach (var icon in _stateIcons.Values)

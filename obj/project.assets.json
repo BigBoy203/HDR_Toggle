@@ -62,7 +62,7 @@
     "/root/.nuget/packages/": {}
   },
   "project": {
-    "version": "1.7.0",
+    "version": "1.7.1",
     "restore": {
       "projectUniqueName": "/home/user/HDR_Toggle/HdrToggle.csproj",
       "projectName": "HdrToggle",
